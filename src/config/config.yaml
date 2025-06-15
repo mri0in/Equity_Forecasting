@@ -1,0 +1,98 @@
+# Stores core training/model hyperparameters and references paths (usually relative) for data and saving models.
+
+# ----------------------------
+# Section: Data Paths
+# ----------------------------
+data:
+  # Paths for datasets
+  raw_data_dir: "datalake/data/raw/"
+  processed_data_dir: "datalake/data/processed/"
+  features_data_dir: "datalake/data/features/"
+
+# ----------------------------
+# Section: Model Paths
+# ----------------------------
+model:
+  # Checkpoints directory for intermediate saved models during training
+  checkpoints_dir: "datalake/models/checkpoints/"
+  
+  # Final trained model directory
+  trained_model_dir: "datalake/models/trained/"
+  
+  # Final trained model filename
+  trained_model_file: "lstm_model.pt"
+
+# ----------------------------
+# Section: Predictions
+# ----------------------------
+predictions:
+  # Where to save test predictions
+  test_dir: "datalake/predictions/test/"
+  
+  # Where to save validation predictions
+  validation_dir: "datalake/predictions/validation/"
+
+# ----------------------------
+# Section: Metadata
+# ----------------------------
+metadata:
+  schema_dir: "datalake/metadata/schema/"
+  stats_dir: "datalake/metadata/stats/"
+
+# ----------------------------
+# Section: Logs
+# ----------------------------
+logging:
+  train_log_file: "datalake/logs/train.log"
+  inference_log_file: "datalake/logs/inference.log"
+  level: "INFO"
+
+# ----------------------------
+# Section: Evaluation
+# ----------------------------
+evaluation:
+  metrics_dir: "datalake/evaluation/metrics/"
+  reports_dir: "datalake/evaluation/reports/"
+
+# ----------------------------
+# Section: Experiments
+# ----------------------------
+experiments:
+  optuna_trials_dir: "datalake/experiments/optuna/"
+  wandb_runs_dir: "datalake/experiments/wandb/"
+
+# ----------------------------
+# Section: Model Parameters
+# ----------------------------
+model_params:
+  input_size: 10
+  hidden_size: 64
+  num_layers: 2
+  output_size: 1
+  dropout: 0.3
+  learning_rate: 0.001
+  batch_size: 32
+  num_epochs: 100
+  device: "cuda"  # or "cpu"
+
+# ----------------------------
+# Section: Early Stopping
+# ----------------------------
+early_stopping:
+  patience: 10
+  delta: 0.0001
+  checkpoint_file: "datalake/models/checkpoints/best_model.pt"
+
+# ----------------------------
+# Section: Walk-Forward Validation
+# ----------------------------
+walk_forward:
+  enabled: true                        # Whether to activate WFV
+  n_splits: 5                          # Number of rolling splits
+  test_size_days: 30                  # Test window size in days
+  step_size_days: 15                  # Shift size between folds
+  overlap: false                       # Allow overlapping test windows
+  save_dir: "datalake/wfv/models/"     # Where to save models from each fold
+  metrics: ["mape", "rmse", "r2"]      # Metrics to evaluate on each fold
+  evaluation_output: "datalake/wfv/reports/wfv_summary.json"  # Aggregated report output
+  oof_predictions_dir: "datalake/wfv/oof_predictions/"         # Optional: store out-of-fold predictions

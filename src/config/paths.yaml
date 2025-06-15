@@ -1,0 +1,29 @@
+datalake:
+  data:
+    raw: "datalake/data/raw/"
+    processed: "datalake/data/processed/"
+    features: "datalake/data/features/"
+
+  models:
+    checkpoints: "datalake/models/checkpoints/"
+    trained: "datalake/models/trained/"
+
+  predictions:
+    test: "datalake/predictions/test/"
+    validation: "datalake/predictions/validation/"
+
+  metadata:
+    schema: "datalake/metadata/schema/"
+    stats: "datalake/metadata/stats/"
+
+  logs:
+    training: "datalake/logs/train.log"
+    inference: "datalake/logs/inference.log"
+
+  evaluation:
+    metrics: "datalake/evaluation/metrics/"
+    reports: "datalake/evaluation/reports/"
+
+  experiments:
+    optuna_trials: "datalake/experiments/optuna/"
+    wandb_runs: "datalake/experiments/wandb/"

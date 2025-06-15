@@ -1,0 +1,20 @@
+pandas                                      #Data processing
+numpy                                       #Data processing
+matplotlib                                  #Visualization
+scikit-learn                                #ML
+torch                                       #ML Models
+yfinance                                    #Data sources
+pyYAML                                      #Data serialization format(config)
+requests                                    #News parsing/sentiment
+beautifulsoup4                              #News parsing/sentiment
+nltk                                        #News parsing/sentiment
+textblob                                    #News parsing/sentiment
+plotly                                      #Visualization
+streamlit                                   #Dashboard
+fastapi                                     #Dashboard
+uvicorn                                     #Dashboard
+schedule                                    #Alerts/scheduling
+python-dotenv                               #env config
+httpx                                       #Async + Sync requests
+optuna                                      #Hyperparameter optimizer
+lightgbm                                    #Boost prediction performance

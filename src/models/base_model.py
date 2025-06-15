@@ -42,24 +42,25 @@ class  BaseModel(ABC):
               X_val: Optional[pd.DataFrame] = None,
               y_val: Optional[pd.Series] = None) -> None:
         """Train the model using features X and target y. Optional validation set for early stopping."""
-        ...
+        ... # pragma: no cover
 
+    
     @abstractmethod
     def predict(self, X: pd.DataFrame) -> np.ndarray:
         """Generate predictions using features X."""
-        ...
+        ... # pragma: no cover
 
     @abstractmethod
     def get_params(self) -> Dict[str, Any]:
         """Return the hyperparameters/config used by this model."""
-        ...
+        ... # pragma: no cover
 
     @abstractmethod
     def save(self, path: str) -> None:
         """Serialize the model to disk."""
-        ...
+        ... # pragma: no cover
 
     @abstractmethod
     def load(self, path: str) -> None:
         """Load a serialized model from disk."""
-        ...
+        ... # pragma: no cover

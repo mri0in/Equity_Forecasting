@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader, TensorDataset
 import numpy as np
 
 from src.models.base_model import BaseModel
-from src.models.optimizers.early_stopping import EarlyStopping
+from src.training.optimizers.early_stopping import EarlyStopping
 
 class LSTMModel(BaseModel):
     """
@@ -178,22 +178,6 @@ class LSTMModel(BaseModel):
                     self.logger.info("Early stopping triggered.")
                     break
 
-    def predict(self, X_test: np.ndarray) -> np.ndarray:
-        """
-        Generate predictions with the trained model.
-
-        Args:
-            X_test (np.ndarray): Test features, shape (num_samples, seq_len, input_size).
-
-        Returns:
-            np.ndarray: Predicted values, shape (num_samples, output_size).
-        """
-        self.model.eval()
-        with torch.no_grad():
-            inputs = torch.from_numpy(X_test).float().to(self.device)
-            outputs = self.model(inputs)
-            predictions = outputs.cpu().numpy()
-        return predictions
 
     def save_model(self, directory: str) -> None:
         """
@@ -241,3 +225,40 @@ class LSTMModel(BaseModel):
 
         instance.logger.info("Model loaded from %s", directory)
         return instance
+
+    def predict(self, X_test: np.ndarray) -> np.ndarray:
+        """
+        Generate predictions with the trained model.
+
+        Args:
+            X_test (np.ndarray): Test features, shape (num_samples, seq_len, input_size).
+
+        Returns:
+            np.ndarray: Predicted values, shape (num_samples, output_size).
+        """
+        self.model.eval()
+        with torch.no_grad():
+            inputs = torch.from_numpy(X_test).float().to(self.device)
+            outputs = self.model(inputs)
+            predictions = outputs.cpu().numpy()
+        return predictions
+    
+def get_params(self) -> Dict[str, Any]:
+    """
+    Get a copy of the model's current hyperparameters.
+
+    Returns:
+        Dict[str, Any]: Dictionary containing model hyperparameters.
+    """
+    self.logger.debug("Fetching model parameters.")
+    return {
+        "input_size": self.input_size,
+        "hidden_size": self.hidden_size,
+        "num_layers": self.num_layers,
+        "output_size": self.output_size,
+        "dropout": self.dropout,
+        "batch_size": self.batch_size,
+        "epochs": self.epochs,
+        "learning_rate": self.learning_rate,
+        "device": str(self.device)
+    }

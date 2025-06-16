@@ -18,9 +18,9 @@
 	"Test Header with Unique ID": {
 		"prefix": "testheader",
 		"body": [
-			"# === Test Case: TC${CURRENT_YEAR}${CURRENT_MONTH}${CURRENT_DATE}_baseModel_${1:💥MANUALLY_INCREMENT_THIS} ===",
+			"# === Test Case: TC${CURRENT_YEAR}${CURRENT_MONTH}${CURRENT_DATE}_LstmModel_${1:💥MANUALLY_INCREMENT_THIS} ===",
 			"# Description : ${2:}",
-			"# Component   : ${3:src/models/base_model.py}",
+			"# Component   : ${3:src/models/lstm_model.py}",
 			"# Category    : ${4:Unit / Integration / Functional}",
 			"# Author      : Mri",
     		"# Created On  : ${CURRENT_YEAR}-${CURRENT_MONTH}-${CURRENT_DATE} ${CURRENT_HOUR}:${CURRENT_MINUTE}"

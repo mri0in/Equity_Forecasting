@@ -44,7 +44,7 @@ class EarlyStopping:
         self.checkpoint_path = checkpoint_path
 
         self.counter = 0
-        self.best_loss = np.Inf
+        self.best_loss = np.inf
         self.early_stop = False
 
     def __call__(self, val_loss: float, model: torch.nn.Module) -> None:
@@ -81,6 +81,10 @@ class EarlyStopping:
         Args:
             model (torch.nn.Module): Model to save.
         """
-        os.makedirs(os.path.dirname(self.checkpoint_path), exist_ok=True)
+        dir_path = os.path.dirname(self.checkpoint_path)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
+
         torch.save(model.state_dict(), self.checkpoint_path)
         logger.debug(f"Model checkpoint saved at: {self.checkpoint_path}")
+

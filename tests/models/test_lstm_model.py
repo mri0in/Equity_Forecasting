@@ -4,6 +4,7 @@ import json
 import numpy as np
 import torch
 import pytest
+import tempfile
 from typing import Any, Dict, Optional
 
 
@@ -87,18 +88,34 @@ def test_model_initialization(model):
 # Author      : Mri
 # Created On  : 2025-06-16 22:10
 def test_model_train_and_predict(model):
-    
-    X_train, y_train = create_dummy_data()
-    X_val, y_val = create_dummy_data()
+    # Step 1: Make a copy of original model params
+    test_params = MODEL_PARAMS.copy()
 
-    model.train(X_train, y_train, X_val, y_val)
+    # Step 2: Inject temporary early stopping path into copied config
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        test_params["early_stopping"] = {
+            "enabled": True,
+            "patience": 2,
+            "delta": 0.001,
+            "checkpoint_path": os.path.join(tmp_dir, "best_model.pt")
+        }
 
-    X_test, _ = create_dummy_data(samples=3)
-    preds = model.predict(X_test)
+        # Step 3: Instantiate model
+        model = LSTMModel(model_params=test_params)
 
-    assert preds.shape == (3, MODEL_PARAMS["output_size"])
-    assert isinstance(preds, np.ndarray)
+        # Step 4: Train with dummy data
+        X_train, y_train = create_dummy_data()
+        X_val, y_val = create_dummy_data()
+        model.train(X_train, y_train, X_val, y_val)
 
+        # Step 5: Predict on test set
+        X_test, _ = create_dummy_data(samples=3)
+        preds = model.predict(X_test)
+
+        # Step 6: Assertions
+        assert preds.shape == (3, MODEL_PARAMS["output_size"])
+        assert isinstance(preds, np.ndarray)
+        
 # === Test Case: TC20250616_LstmModel_004 ===
 # Description : 
 # Component   : src/models/lstm_model.py

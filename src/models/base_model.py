@@ -28,7 +28,7 @@ class BaseModel(ABC):
         self.early_stopping_params = {
             "patience": self.model_params.get("early_stopping", {}).get("patience", 5),
             "delta": self.model_params.get("early_stopping", {}).get("delta", 1e-4),
-            "checkpoint_path": self.model_params.get("early_stopping", {}).get("checkpoint_path", "checkpoints/best_model.pt")
+            "checkpoint_path": self.model_params.get("early_stopping", {}).get("checkpoint_file", "checkpoints/best_model.pt")
         }
 
         if self.early_stopping_enabled:

@@ -1,13 +1,15 @@
 import pytest
+from abc import ABC, abstractmethod
 from src.models.base_model import BaseModel
+
 
 # Dummy model to test abstract base class behavior
 class DummyModel(BaseModel):
     def train(self, X, y, X_val=None, y_val=None): pass
     def predict(self, X): return []
     def get_params(self): return {}
-    def save(self, path): pass
-    def load(self, path): pass
+    def save_model(self, path): pass
+    def load_model(self, path): pass
 
 # === Test Case: TC20250615_baseModel_001 ===
 # Description : Test that BaseModel cannot be instantiated directly due to it being an abstract method.
@@ -60,7 +62,7 @@ def test_custom_early_stopping_config(caplog):
             "enabled": True,
             "patience": 10,
             "delta": 0.002,
-            "checkpoint_path": "custom/checkpoint.pt"
+            "checkpoint_file": "custom/checkpoint.pt"
         }
     }
 

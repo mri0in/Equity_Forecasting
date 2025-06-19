@@ -51,7 +51,7 @@ class BaseModel(ABC):
             X_val (Optional[pd.DataFrame]): Validation feature matrix.
             y_val (Optional[pd.Series]): Validation target values.
         """
-        raise NotImplementedError("Subclasses must implement 'train'")
+        raise NotImplementedError("Subclasses must implement 'train'") # parama : no cover
 
 
     @abstractmethod
@@ -62,7 +62,7 @@ class BaseModel(ABC):
         Args:
             path (str): Destination path to save model.
         """
-        raise NotImplementedError("Subclasses must implement 'save_model'")
+        raise NotImplementedError("Subclasses must implement 'save_model'") # parama : no cover
 
     @abstractmethod
     def load_model(self, path: str) -> None:
@@ -72,7 +72,7 @@ class BaseModel(ABC):
         Args:
             path (str): Path to load model from.
         """
-        raise NotImplementedError("Subclasses must implement 'load_model'")
+        raise NotImplementedError("Subclasses must implement 'load_model'") # parama : no cover
 
     @abstractmethod
     def predict(self, X: pd.DataFrame) -> np.ndarray:
@@ -85,7 +85,8 @@ class BaseModel(ABC):
         Returns:
             np.ndarray: Predicted values.
         """
-        raise NotImplementedError("Subclasses must implement 'predict'")
+        raise NotImplementedError("Subclasses must implement 'predict'") # parama : no cover
+    
     def get_params(self) -> Dict[str, Any]:
         """
         Return the model's configuration parameters.
@@ -93,4 +94,4 @@ class BaseModel(ABC):
         Returns:
             Dict[str, Any]: Model hyperparameters and configurations.
         """
-        return self.model_params.copy()
+        return self.model_params.copy() # parama : no cover

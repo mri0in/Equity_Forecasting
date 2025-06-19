@@ -29,24 +29,26 @@ def train(self, X_train: np.ndarray, y_train: np.ndarray,
     """
     return super().train(X_train, y_train, X_val, y_val)
 
-def predict(self, X_test: np.ndarray) -> np.ndarray:
-    """
-    Wrapper to satisfy abstract method 'predict' from BaseModel.
-    """
-    return super().predict(X_test)
 
-def save(self, path: str) -> None:
+
+def save_model(self, path: str) -> None:
     """
     Save model (BaseModel abstract requirement).
     """
     self.save(path)
 
 @classmethod
-def load(cls, path: str) -> "LSTMModel":
+def load_model(cls, path: str) -> "LSTMModel":
     """
     Load model (BaseModel abstract requirement).
     """
     return cls.load(path)
+
+def predict(self, X_test: np.ndarray) -> np.ndarray:
+    """
+    Wrapper to satisfy abstract method 'predict' from BaseModel.
+    """
+    return super().predict(X_test)
 
 def get_params(self) -> Dict[str, Any]:
     """

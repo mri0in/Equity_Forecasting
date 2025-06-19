@@ -9,7 +9,7 @@ from typing import List, Dict, Union, Callable
 import numpy as np
 import pandas as pd
 from sklearn.metrics import (
-    mean_squared_error,
+    root_mean_squared_error,
     mean_absolute_error,
     mean_absolute_percentage_error,
     r2_score
@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 # ----------------------------- #
 
 def rmse(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    return mean_squared_error(y_true, y_pred, squared=False)
+    return root_mean_squared_error(y_true, y_pred)
 
 def mae(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     return mean_absolute_error(y_true, y_pred)

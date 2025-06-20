@@ -10,6 +10,7 @@ from src.training.evaluate import (
     directional_accuracy,
     compute_metrics
 )
+testheader
 
 def test_rmse():
     y_true = np.array([1.0, 2.0, 3.0])

@@ -35,11 +35,14 @@ def r2(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     return r2_score(y_true, y_pred)
 
 def sharpe_ratio(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    returns = y_pred - y_true
-    if np.std(returns) == 0:
-        return 0.0
-    return np.mean(returns) / np.std(returns)
+    
+    returns = np.array(y_pred) - np.array(y_true)
+    std_dev = returns.std()
 
+    if std_dev == 0:
+        return 0.0
+
+    return returns.mean() / std_dev
 def directional_accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     return np.mean(np.sign(y_true[1:] - y_true[:-1]) == np.sign(y_pred[1:] - y_pred[:-1]))
 

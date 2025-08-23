@@ -10,8 +10,12 @@ from src.training.evaluate import (
     directional_accuracy,
     compute_metrics
 )
-testheader
-
+# === Test Case: TC20250823_TestEvaluate_01 ===
+# Description : Test evaluation metrics implementations and compute_metrics function.
+# Component   : src/training/evaluate.py
+# Category    : Unit 
+# Author      : Mri
+# Created On  : 2025-08-23 20:51
 def test_rmse():
     y_true = np.array([1.0, 2.0, 3.0])
     y_pred = np.array([1.0, 2.0, 4.0])
@@ -36,13 +40,14 @@ def test_r2():
 
 def test_sharpe_ratio_nonzero_std():
     returns = np.array([0.01, 0.02, -0.01, 0.03])
-    ratio = sharpe_ratio(returns)
+    ratio = sharpe_ratio(np.zeros_like(returns),returns)
     assert isinstance(ratio, float)
     assert ratio != 0.0
 
 def test_sharpe_ratio_zero_std():
+    y_true = np.zeros(3)
     returns = np.array([0.01, 0.01, 0.01])
-    assert sharpe_ratio(returns) == 0.0
+    assert sharpe_ratio(y_true,returns) == 0.0
 
 def test_directional_accuracy():
     y_true = np.array([1, 2, 3, 2, 3])

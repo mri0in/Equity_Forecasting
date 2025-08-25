@@ -1,5 +1,5 @@
 """
-simple_ensemble.py
+simple_ensembler.py
 
 This module provides basic ensemble strategies such as mean, median, and weighted averaging
 over multiple model predictions. It can be extended for more advanced ensemble techniques.
@@ -7,7 +7,7 @@ over multiple model predictions. It can be extended for more advanced ensemble t
 import numpy as np
 from typing import List, Literal, Union
 from src.utils.logger import get_logger
-from src.models.evaluate import evaluate_metrics
+from src.training.evaluate import compute_metrics
 
 logger = get_logger(__name__)
 
@@ -74,4 +74,4 @@ class SimpleEnsembler:
         Returns:
             dict: Dictionary of computed metrics.
         """
-        return evaluate_metrics(y_true, y_pred, self.metrics)
+        return compute_metrics(y_true, y_pred, self.metrics)

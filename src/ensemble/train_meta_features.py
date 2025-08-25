@@ -1,5 +1,3 @@
-# src/ensemble/train_meta_model.py
-
 """
 Train a LightGBM meta-learner on combined meta-features
 (oof predictions + handcrafted features).

@@ -3,90 +3,77 @@ Train a LightGBM meta-learner on combined meta-features
 (oof predictions + handcrafted features).
 """
 
+import logging
 import os
 import joblib
-import lightgbm as lgb
 import pandas as pd
-from typing import Optional
-from sklearn.model_selection import train_test_split
+import lightgbm as lgb
+from typing import Tuple, Optional
 from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import train_test_split
 
-from src.utils.logger import get_logger
+# Configure logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
-logger = get_logger(__name__)
 
-
-class MetaModelTrainer:
+class MetaFeatureTrainer:
     """
-    Trains a LightGBM model on meta-features for ensemble learning.
+    Trainer for meta-feature model using LightGBM.
     """
 
-    def __init__(
-        self,
-        data_path: str,
-        target_col: str = "target",
-        model_params: Optional[dict] = None,
-        test_size: float = 0.2,
-        random_state: int = 42
-    ) -> None:
+    def __init__(self, data_path: str, test_size: float = 0.2, random_state: int = 42,
+                 model_params: Optional[dict] = None) -> None:
         """
-        Initialize the trainer with dataset path and model configuration.
+        Initialize the trainer with dataset path and LightGBM params.
+        """
+        if not os.path.exists(data_path):
+            raise FileNotFoundError(f"Data file not found: {data_path}")
+        if not (0 < test_size < 1):
+            raise ValueError("test_size must be between 0 and 1.")
 
-        Args:
-            data_path (str): Path to CSV containing meta-features.
-            target_col (str): Name of the target column.
-            model_params (dict, optional): LightGBM hyperparameters.
-            test_size (float): Proportion of data to use for validation.
-            random_state (int): Random seed for reproducibility.
-        """
         self.data_path = data_path
-        self.target_col = target_col
+        self.test_size = test_size
+        self.random_state = random_state
         self.model_params = model_params or {
             "objective": "regression",
             "metric": "rmse",
-            "verbosity": -1,
             "boosting_type": "gbdt",
             "learning_rate": 0.05,
             "num_leaves": 31,
-            "max_depth": -1
+            "feature_fraction": 0.9,
+            "bagging_fraction": 0.8,
+            "bagging_freq": 5,
+            "verbose": -1
         }
-        self.test_size = test_size
-        self.random_state = random_state
-        self.model = None
+        self.model: Optional[lgb.Booster] = None
+        logger.info("Initialized MetaFeatureTrainer with data=%s", data_path)
 
-    def load_data(self) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]:
+    def prepare_datasets(self) -> Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]:
         """
-        Load meta-feature data and split into train/validation sets.
-
-        Returns:
-            Tuple: X_train, y_train, X_val, y_val
+        Load dataset and split into train/validation sets.
         """
-        df = pd.read_csv(self.data_path)
-        logger.info("Meta-feature data loaded with shape %s", df.shape)
+        logger.info("Loading meta-feature dataset from %s", self.data_path)
+        data = pd.read_csv(self.data_path)
 
-        if self.target_col not in df.columns:
-            msg = f"Target column '{self.target_col}' not found."
-            logger.error(msg)
-            raise ValueError(msg)
+        if "target" not in data.columns:
+            raise ValueError("Dataset must contain a 'target' column.")
 
-        X = df.drop(columns=[self.target_col])
-        y = df[self.target_col]
+        X = data.drop(columns=["target"])
+        y = data["target"]
 
         X_train, X_val, y_train, y_val = train_test_split(
-            X, y,
-            test_size=self.test_size,
-            random_state=self.random_state
+            X, y, test_size=self.test_size, random_state=self.random_state
         )
-        logger.info("Data split: train=%s, val=%s", X_train.shape, X_val.shape)
 
+        logger.info("Prepared datasets: train=%d, val=%d", len(X_train), len(X_val))
         return X_train, y_train, X_val, y_val
 
-    def train(self) -> None:
+    def train_model(self, X_train: pd.DataFrame, y_train: pd.Series,
+                    X_val: pd.DataFrame, y_val: pd.Series) -> lgb.Booster:
         """
-        Train the LightGBM model on the meta-feature dataset.
+        Train the LightGBM model.
         """
-        X_train, y_train, X_val, y_val = self.load_data()
-
         train_data = lgb.Dataset(X_train, label=y_train)
         val_data = lgb.Dataset(X_val, label=y_val)
 
@@ -101,20 +88,32 @@ class MetaModelTrainer:
             verbose_eval=100
         )
 
-        y_pred = self.model.predict(X_val)
-        rmse = mean_squared_error(y_val, y_pred, squared=False)
+        logger.info("Best iteration: %d", self.model.best_iteration)
+        return self.model
+
+    def evaluate(self, X_val: pd.DataFrame, y_val: pd.Series) -> float:
+        """
+        Evaluate model using RMSE.
+        """
+        if self.model is None:
+            raise ValueError("Model has not been trained yet.")
+
+        y_pred = self.model.predict(X_val, num_iteration=self.model.best_iteration)
+        rmse = mean_squared_error(y_val, y_pred)
         logger.info("Validation RMSE: %.4f", rmse)
+
+        # Feature importance logging
+        importance = self.model.feature_importance(importance_type="gain")
+        features_sorted = sorted(zip(X_val.columns, importance), key=lambda x: x[1], reverse=True)[:10]
+        logger.info("Top 10 features by gain: %s", features_sorted)
+
+        return rmse
 
     def save_model(self, path: str) -> None:
         """
-        Save the trained LightGBM model to disk.
-
-        Args:
-            path (str): Destination path (.pkl).
+        Save the trained model to disk.
         """
         if self.model is None:
-            raise RuntimeError("Model not trained yet. Call `train()` first.")
-
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+            raise ValueError("No trained model to save.")
         joblib.dump(self.model, path)
         logger.info("Meta-model saved to %s", path)

@@ -14,7 +14,7 @@ import numpy as np
 import yaml
 from typing import Dict, List
 from src.utils.logger import get_logger
-from src.ensemble.simple_ensemble import simple_average_ensemble, weighted_average_ensemble
+from src.ensemble.simple_ensembler import simple_average_ensemble, weighted_average_ensemble
 from src.ensemble.generate_oof import generate_oof_predictions
 from src.ensemble.meta_features import create_meta_features
 from src.ensemble.train_meta_features import train_meta_model

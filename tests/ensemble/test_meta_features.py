@@ -1,39 +1,105 @@
+import os
 import numpy as np
+import pandas as pd
 import pytest
+from unittest.mock import patch, MagicMock
 
-from src.ensemble.meta_features import generate_meta_features
-
-
-def test_meta_features_shape(dummy_model):
-    """Test that meta-features have the correct shape."""
-    X = np.random.rand(30, 5)
-    y = np.random.rand(30)
-
-    models = [dummy_model, dummy_model]  # Two identical dummy models
-    meta_features = generate_meta_features(models, X, y, n_splits=3)
-
-    assert meta_features.shape == (30, 2), "Meta-features should have shape (n_samples, n_models)"
+from src.ensemble.meta_features import MetaFeaturesBuilder
 
 
-def test_meta_features_reproducibility(dummy_model):
-    """Test that meta-features are reproducible with the same random state."""
-    X = np.random.rand(30, 5)
-    y = np.random.rand(30)
+@pytest.fixture
+def tmp_oof_files(tmp_path):
+    """Create temporary OOF preds and targets .npy files."""
+    preds = np.array([1.0, 2.0, 3.0])
+    targets = np.array([1.0, 2.0, 3.0])
 
-    models = [dummy_model, dummy_model]
+    preds_path = tmp_path / "oof_preds.npy"
+    targets_path = tmp_path / "oof_targets.npy"
 
-    mf1 = generate_meta_features(models, X, y, n_splits=3, random_state=123)
-    mf2 = generate_meta_features(models, X, y, n_splits=3, random_state=123)
+    np.save(preds_path, preds)
+    np.save(targets_path, targets)
 
-    assert np.allclose(mf1, mf2), "Meta-features should be reproducible"
+    return str(preds_path), str(targets_path)
 
 
-def test_meta_features_invalid_splits(dummy_model):
-    """Test that invalid n_splits raises a ValueError."""
-    X = np.random.rand(12, 4)
-    y = np.random.rand(12)
+def test_load_oof_success(tmp_oof_files):
+    preds_path, targets_path = tmp_oof_files
+    builder = MetaFeaturesBuilder(preds_path, targets_path, [])
 
-    models = [dummy_model]
+    df = builder.load_oof()
 
-    with pytest.raises(ValueError):
-        generate_meta_features(models, X, y, n_splits=20)
+    assert "oof_pred" in df.columns
+    assert "target" in df.columns
+    assert len(df) == 3
+    assert df.iloc[0]["oof_pred"] == 1.0
+
+
+def test_load_oof_shape_mismatch(tmp_path):
+    preds = np.array([1.0, 2.0])
+    targets = np.array([1.0, 2.0, 3.0])
+
+    preds_path = tmp_path / "oof_preds.npy"
+    targets_path = tmp_path / "oof_targets.npy"
+    np.save(preds_path, preds)
+    np.save(targets_path, targets)
+
+    builder = MetaFeaturesBuilder(str(preds_path), str(targets_path), [])
+
+    with pytest.raises(ValueError, match="Shape mismatch"):
+        builder.load_oof()
+
+
+def test_load_features_with_npy_and_csv(tmp_path):
+    # npy feature
+    npy_path = tmp_path / "feat.npy"
+    np.save(npy_path, np.array([[1], [2], [3]]))
+
+    # csv feature
+    csv_path = tmp_path / "feat.csv"
+    pd.DataFrame({"f2": [4, 5, 6]}).to_csv(csv_path, index=False)
+
+    builder = MetaFeaturesBuilder("dummy_preds.npy", "dummy_targets.npy", [str(npy_path), str(csv_path)])
+    df = builder.load_features()
+
+    assert df.shape == (3, 2)
+    assert list(df.columns) == [0, "f2"]
+
+
+def test_load_features_unsupported_file(tmp_path):
+    bad_file = tmp_path / "feat.txt"
+    bad_file.write_text("bad data")
+
+    builder = MetaFeaturesBuilder("p.npy", "t.npy", [str(bad_file)])
+    with pytest.raises(ValueError, match="Unsupported feature file type"):
+        builder.load_features()
+
+
+def test_load_features_length_mismatch(tmp_path):
+    f1 = tmp_path / "f1.npy"
+    f2 = tmp_path / "f2.npy"
+
+    np.save(f1, np.array([[1], [2]]))
+    np.save(f2, np.array([[3], [4], [5]]))
+
+    builder = MetaFeaturesBuilder("p.npy", "t.npy", [str(f1), str(f2)])
+    with pytest.raises(ValueError, match="Feature length mismatch"):
+        builder.load_features()
+
+
+@patch("src.ensemble.meta_features.pd.DataFrame.to_csv")
+def test_build_and_save(mock_to_csv, tmp_oof_files, tmp_path):
+    preds_path, targets_path = tmp_oof_files
+
+    # create extra feature file
+    feat_path = tmp_path / "extra.npy"
+    np.save(feat_path, np.array([[10], [20], [30]]))
+
+    builder = MetaFeaturesBuilder(preds_path, targets_path, [str(feat_path)])
+    out_csv = tmp_path / "meta.csv"
+
+    df_meta = builder.build(save_path=str(out_csv))
+
+    assert "oof_pred" in df_meta.columns
+    assert "target" in df_meta.columns
+    assert df_meta.shape[0] == 3
+    mock_to_csv.assert_called_once()

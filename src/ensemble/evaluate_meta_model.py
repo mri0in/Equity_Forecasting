@@ -4,7 +4,7 @@ import joblib
 import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import Tuple
-from sklearn.metrics import mean_absolute_error, mean_squared_error
+from sklearn.metrics import mean_absolute_error, root_mean_squared_error
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -37,7 +37,7 @@ def evaluate_predictions(y_true: np.ndarray, y_pred: np.ndarray) -> None:
         y_pred (np.ndarray): Predicted values by the meta model.
     """
     mae = mean_absolute_error(y_true, y_pred)
-    rmse = root_mean_squared_error(y_true, y_pred, squared=False)
+    rmse = root_mean_squared_error(y_true, y_pred)
     mape = np.mean(np.abs((y_true - y_pred) / y_true)) * 100
 
     logger.info(f"Evaluation Metrics:")

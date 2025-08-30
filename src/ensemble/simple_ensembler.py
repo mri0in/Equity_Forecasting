@@ -5,73 +5,101 @@ This module provides basic ensemble strategies such as mean, median, and weighte
 over multiple model predictions. It can be extended for more advanced ensemble techniques.
 """
 import numpy as np
-from typing import List, Literal, Union
+from typing import List, Dict, Callable, Literal
 from src.utils.logger import get_logger
-from src.training.evaluate import compute_metrics
 
 logger = get_logger(__name__)
 
+
 class SimpleEnsembler:
     """
-    Performs simple ensembling methods like mean, median, or weighted average.
+    Class for simple ensemble strategies like mean, median, and weighted average.
     """
 
-    def __init__(
-        self,
-        method: Literal["mean", "median", "weighted"] = "mean",
-        weights: Union[List[float], None] = None,
-        metrics: List[str] = ["rmse", "mae"]
-    ):
+    def __init__(self, predictions: List[np.ndarray]):
         """
-        Initialize the SimpleEnsembler.
+        Initialize the ensembler with predictions.
 
         Args:
-            method (str): Ensemble method - "mean", "median", or "weighted".
-            weights (List[float], optional): Weights for "weighted" method.
-            metrics (List[str]): Evaluation metrics to compute.
+            predictions (List[np.ndarray]): List of model prediction arrays.
         """
-        self.method = method
-        self.weights = weights
-        self.metrics = metrics
+        if not predictions or not all(isinstance(p, np.ndarray) for p in predictions):
+            raise ValueError("Predictions must be a non-empty list of numpy arrays.")
+        self.predictions = predictions
+        logger.info("Initialized SimpleEnsembler with %d prediction arrays.", len(predictions))
 
-    def ensemble_predictions(self, prediction_arrays: List[np.ndarray]) -> np.ndarray:
+    def simple_average_ensemble(self) -> np.ndarray:
+        """Perform simple mean ensemble."""
+        logger.info("Performing simple average ensemble.")
+        return np.mean(self.predictions, axis=0)
+
+    def median_ensemble(self) -> np.ndarray:
+        """Perform median ensemble."""
+        logger.info("Performing median ensemble.")
+        return np.median(self.predictions, axis=0)
+
+    def weighted_average_ensemble(self, weights: List[float]) -> np.ndarray:
         """
-        Combine predictions using the selected ensemble method.
+        Perform weighted average ensemble.
 
         Args:
-            prediction_arrays (List[np.ndarray]): List of model prediction arrays.
+            weights (List[float]): Weights for each model.
 
         Returns:
-            np.ndarray: Combined predictions.
+            np.ndarray: Weighted predictions.
         """
-        stacked = np.stack(prediction_arrays, axis=0)
-        logger.info(f"Stacked predictions shape: {stacked.shape}")
+        if len(weights) != len(self.predictions):
+            raise ValueError("Number of weights must match number of prediction arrays.")
+        logger.info("Performing weighted average ensemble with weights: %s", weights)
+        weights = np.array(weights)
+        return np.average(self.predictions, axis=0, weights=weights)
 
-        if self.method == "mean":
-            return np.mean(stacked, axis=0)
-        elif self.method == "median":
-            return np.median(stacked, axis=0)
-        elif self.method == "weighted":
-            if not self.weights or len(self.weights) != len(prediction_arrays):
-                raise ValueError("Invalid or missing weights for weighted ensemble.")
-            weights = np.array(self.weights).reshape(-1, 1)
-            return np.sum(stacked * weights, axis=0) / np.sum(weights)
-        else:
-            raise ValueError(f"Unsupported ensemble method: {self.method}")
+    def ensemble_predictions(
+        self,
+        method: Literal["mean", "median", "weighted"] = "mean",
+        weights: List[float] = None,
+    ) -> np.ndarray:
+        """
+        Select ensemble strategy.
+
+        Args:
+            method (Literal["mean", "median", "weighted"]): Ensemble method.
+            weights (List[float], optional): Weights for weighted ensemble.
+
+        Returns:
+            np.ndarray: Final ensemble predictions.
+        """
+        logger.info("Ensembling using method: %s", method)
+
+        if method == "mean":
+            return self.simple_average_ensemble()
+        elif method == "median":
+            return self.median_ensemble()
+        elif method == "weighted":
+            if weights is None:
+                raise ValueError("Weights must be provided for weighted ensemble.")
+            return self.weighted_average_ensemble(weights)
+        else:  # Literal makes this unreachable, but kept for safety
+            raise ValueError(f"Unsupported ensemble method: {method}")
 
     def evaluate(
         self,
         y_true: np.ndarray,
-        y_pred: np.ndarray
-    ) -> dict:
+        y_pred: np.ndarray,
+        metrics: List[str],
+        compute_metrics: Callable[[np.ndarray, np.ndarray, List[str]], Dict[str, float]],
+    ) -> Dict[str, float]:
         """
-        Evaluate the ensembled predictions.
+        Evaluate ensemble predictions using given metrics.
 
         Args:
-            y_true (np.ndarray): True labels.
-            y_pred (np.ndarray): Ensemble predictions.
+            y_true (np.ndarray): True values.
+            y_pred (np.ndarray): Predicted values.
+            metrics (List[str]): List of metrics.
+            compute_metrics (Callable): Function to compute metrics.
 
         Returns:
-            dict: Dictionary of computed metrics.
+            Dict[str, float]: Metric results.
         """
-        return compute_metrics(y_true, y_pred, self.metrics)
+        logger.info("Evaluating ensemble predictions with metrics: %s", metrics)
+        return compute_metrics(y_true, y_pred, metrics)

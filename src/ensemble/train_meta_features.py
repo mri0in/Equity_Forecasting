@@ -9,7 +9,7 @@ import joblib
 import pandas as pd
 import lightgbm as lgb
 from typing import Tuple, Optional
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error,mean_absolute_error
 from sklearn.model_selection import train_test_split
 
 # Configure logging
@@ -91,23 +91,27 @@ class MetaFeatureTrainer:
         logger.info("Best iteration: %d", self.model.best_iteration)
         return self.model
 
-    def evaluate(self, X_val: pd.DataFrame, y_val: pd.Series) -> float:
+    def evaluate(self, X_val: pd.DataFrame, y_val: pd.Series) -> dict:
         """
         Evaluate model using RMSE.
         """
         if self.model is None:
             raise ValueError("Model has not been trained yet.")
 
+        # Compute evaluation metrics
         y_pred = self.model.predict(X_val, num_iteration=self.model.best_iteration)
         rmse = mean_squared_error(y_val, y_pred)
+        mae = mean_absolute_error(y_val, y_pred)
+
         logger.info("Validation RMSE: %.4f", rmse)
+        logger.info("Validation MAE: %.4f", mae)
 
         # Feature importance logging
         importance = self.model.feature_importance(importance_type="gain")
         features_sorted = sorted(zip(X_val.columns, importance), key=lambda x: x[1], reverse=True)[:10]
         logger.info("Top 10 features by gain: %s", features_sorted)
 
-        return rmse
+        return {"rmse": rmse, "mae": mae}
 
     def save_model(self, path: str) -> None:
         """

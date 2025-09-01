@@ -14,7 +14,7 @@ import numpy as np
 import yaml
 from src.utils.logger import get_logger
 from src.training.optimizers import get_optimizer  # Your factory to get optimizer by name
-from src.utils.config import load_yaml_config     # Assuming this exists for config loading
+from src.utils.config import load_config    
 
 logger = get_logger(__name__)
 
@@ -50,7 +50,7 @@ def run_hyperparameter_optimization(config_path: str, optimizer_name: str = "opt
                                         Defaults to 'optuna'.
     """
     # Load config using your utility
-    config: Dict = load_yaml_config(config_path)
+    config: Dict = load_config(config_path)
     logger.info(f"Configuration loaded from {config_path}")
 
     # Load training data paths from config

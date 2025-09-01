@@ -72,8 +72,8 @@ def test_train_model_and_evaluate(mock_dataset, mock_train, dummy_csv):
     trainer.train_model(X_train, y_train, X_val, y_val)
 
     assert trainer.model is mock_booster
-    rmse = trainer.evaluate(X_val, y_val)
-    assert rmse == 0  # perfect prediction
+    results = trainer.evaluate(X_val, y_val)
+    assert results["rmse"] == 0  # perfect prediction
 
 
 def test_evaluate_without_training(dummy_csv):

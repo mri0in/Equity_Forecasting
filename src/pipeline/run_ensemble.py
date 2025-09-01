@@ -121,10 +121,9 @@ def run_ensemble(config: Dict) -> Dict[str, float]:
 
         X_train, y_train, X_val, y_val = trainer.prepare_datasets()
         trainer.train_model(X_train, y_train, X_val, y_val)
-        rmse = trainer.evaluate(X_val, y_val)
+        results = trainer.evaluate(X_val, y_val)
         trainer.save_model(model_save_path)
 
-        results = {"rmse": float(rmse)}
         logger.info("Stacked ensemble evaluation: %s", results)
         return results
 

@@ -34,7 +34,7 @@ from pipeline.run_training import run_training
 from pipeline.run_prediction import run_prediction
 from pipeline.run_optimizer import run_optimizer
 from pipeline.run_ensemble import run_ensemble
-from pipeline.run_walk_forwad import run_walk_forward
+from pipeline.run_walk_forward import run_walk_forward
 from api.main import start_api
 from utils.logger import get_logger
 

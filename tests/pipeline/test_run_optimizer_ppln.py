@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
-from src.pipeline.run_optimizer import load_training_data,run_hyperparameter_optimization
+from src.pipeline.run_optimizer import load_training_data, run_hyperparameter_optimization
 
 
 def test_load_training_data_success(tmp_path):
@@ -32,7 +32,7 @@ def test_run_hyperparameter_optimization_default_optimizer(monkeypatch):
         "training": {"n_trials": 10},
     }
 
-    # patch load_yaml_config (not load_config)
+    # patch load_config
     monkeypatch.setattr("src.pipeline.run_optimizer.load_config", lambda _: mock_config)
 
     # patch np.load
@@ -42,42 +42,44 @@ def test_run_hyperparameter_optimization_default_optimizer(monkeypatch):
     mock_optimizer = MagicMock(return_value="fake_study")
     monkeypatch.setattr("src.pipeline.run_optimizer.get_optimizer", lambda *_: mock_optimizer)
     
-    # run function
     run_hyperparameter_optimization("fake_config.yaml", optimizer_name="optuna")
 
-    # assert optimizer was called with expected args
-    mock_optimizer.assert_called_once_with(
-        mock_config,
-        np.array([[1, 2], [3, 4]]),
-        np.array([[1, 2], [3, 4]]),
-        n_trials=10,
-    )
+    # Check it was called exactly once
+    mock_optimizer.assert_called_once()
+
+    # Then manually check arguments
+    args, kwargs = mock_optimizer.call_args
+    assert args[0] == mock_config
+    np.testing.assert_array_equal(args[1], np.array([[1, 2], [3, 4]]))  # X_train
+    np.testing.assert_array_equal(args[2], np.array([[1, 2], [3, 4]]))  # y_train
+    assert kwargs["n_trials"] == 10
 
 def test_run_hyperparameter_optimization_no_training_key(monkeypatch):
-    """Test when config has no 'training' key -> should fallback to default n_trials=50"""
+    """Fallback to n_trials=50 if 'training' key is missing"""
     mock_config = {
         "data": {"X_train_path": "fake_X.npy", "y_train_path": "fake_y.npy"}
     }
 
-    # patch load_config to return our mock config
     monkeypatch.setattr("src.pipeline.run_optimizer.load_config", lambda _: mock_config)
-
-    # patch numpy.load to return dummy arrays
     monkeypatch.setattr("numpy.load", lambda _: np.array([1, 2, 3]))
 
-    # patch optimizer factory
     mock_optimizer = MagicMock(return_value="fake_study")
-    monkeypatch.setattr("src.pipeline.run_optimizer.get_optimizer", lambda _: mock_optimizer)
+    monkeypatch.setattr("src.pipeline.run_optimizer.get_optimizer", lambda *_: mock_optimizer)
 
     run_hyperparameter_optimization("fake_config.yaml", optimizer_name="optuna")
 
-    mock_optimizer.assert_called_once_with(
-        mock_config, np.array([1, 2, 3]), np.array([1, 2, 3]), n_trials=50
-    )
+    # Check it was called exactly once
+    mock_optimizer.assert_called_once()
 
+    
+    args, kwargs = mock_optimizer.call_args
+    assert args[0] == mock_config
+    np.testing.assert_array_equal(args[1], np.array([1, 2, 3]))  # X_train
+    np.testing.assert_array_equal(args[2], np.array([1, 2, 3]))  # y_train
+    assert kwargs["n_trials"] == 50
 
 def test_run_hyperparameter_optimization_with_other_optimizer(monkeypatch):
-    """Test with a different optimizer and custom n_trials in config"""
+    """Custom optimizer and n_trials from config"""
     mock_config = {
         "data": {"X_train_path": "fake_X.npy", "y_train_path": "fake_y.npy"},
         "training": {"n_trials": 5},
@@ -87,10 +89,16 @@ def test_run_hyperparameter_optimization_with_other_optimizer(monkeypatch):
     monkeypatch.setattr("numpy.load", lambda _: np.array([1, 2, 3]))
 
     mock_optimizer = MagicMock(return_value="fake_study")
-    monkeypatch.setattr("src.pipeline.run_optimizer.get_optimizer",lambda name: mock_optimizer if name == "raytune" else None)
+    monkeypatch.setattr(
+        "src.pipeline.run_optimizer.get_optimizer",
+        lambda name: mock_optimizer if name == "raytune" else None,
+    )
 
     run_hyperparameter_optimization("fake_config.yaml", optimizer_name="raytune")
 
-    mock_optimizer.assert_called_once_with(
-        mock_config, np.array([1, 2, 3]), np.array([1, 2, 3]), n_trials=5
-    )
+    args, kwargs = mock_optimizer.call_args
+    assert args[0] == mock_config
+    np.testing.assert_array_equal(args[1], np.array([1, 2, 3]))  # X_train
+    np.testing.assert_array_equal(args[2], np.array([1, 2, 3]))  # y_train
+    assert kwargs["n_trials"] == 5
+

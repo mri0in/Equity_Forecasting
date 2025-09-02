@@ -43,7 +43,7 @@ def objective(trial: optuna.Trial, config: Dict[str, Any], X_train, y_train):
     y_pred = model.predict(X_train)
 
     # Compute RMSE (could be replaced with evaluate.py metrics)
-    rmse = ((y_train - y_pred) ** 2).mean() ** 0.5
+    rmse = float(((y_train - y_pred) ** 2).mean() ** 0.5)
     logger.info(f"Trial {trial.number}: RMSE={rmse:.5f}, params={model_params}")
     return rmse
 

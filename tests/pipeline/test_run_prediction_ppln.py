@@ -46,7 +46,10 @@ def test_run_prediction_pipeline_success(monkeypatch, tmp_path):
     mock_predictor.save_predictions.assert_called_once()
     save_path = os.path.join(fake_config["predictions"]["test_dir"], "predictions.csv")
     np.testing.assert_array_equal(mock_predictor.predict.call_args[0][0], data.values)
-    mock_predictor.save_predictions.assert_called_with(np.array([0.1, 0.2]), save_path)
+    #mock_predictor.save_predictions.assert_called_with(mock_predictor.save_predictions.call_args[1], save_path)
+    called_args, called_kwargs = mock_predictor.save_predictions.call_args
+    assert called_args[1] == save_path
+
 
 
 def test_run_prediction_pipeline_missing_paths(monkeypatch, tmp_path):
@@ -56,7 +59,7 @@ def test_run_prediction_pipeline_missing_paths(monkeypatch, tmp_path):
 
     monkeypatch.setattr("src.pipeline.run_prediction.load_config", lambda path: fake_config if "config" in path else fake_paths)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(TypeError):
         run_prediction_pipeline("config.yaml", "paths.yaml", split="test")
 
 

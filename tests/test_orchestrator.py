@@ -3,6 +3,8 @@ import pytest
 import types
 
 import src.pipeline.orchestrator as orchestrator
+import src.pipeline.pipeline_wrapper as wrapper
+
 
 
 class DummyConfig:
@@ -31,7 +33,7 @@ def fake_orchestrator(monkeypatch, tmp_path):
     calls = {}
 
     def fake_stage(config_path):
-        calls[config_path] = True
+        calls.setdefault(config_path, []).append(True)
 
     monkeypatch.setattr(orchestrator, "run_training", fake_stage)
     monkeypatch.setattr(orchestrator, "run_prediction", fake_stage)
@@ -43,6 +45,21 @@ def fake_orchestrator(monkeypatch, tmp_path):
     orch._calls = calls  # attach for inspection
     return orch
 
+
+def test_wrapper_exports_correct_symbols():
+     # Check that wrapper exposes callables/classes
+    assert callable(wrapper.run_training)
+    assert callable(wrapper.run_optimizer)
+    assert callable(wrapper.run_ensemble)
+    assert callable(wrapper.run_prediction)
+    assert callable(wrapper.run_walk_forward)
+
+    # Optionally check names
+    assert wrapper.run_training.__name__ in ("ModelTrainerPipeline", "run_training")
+    assert wrapper.run_optimizer.__name__ in("run_hyperparameter_optimization","run_optimizer")
+    assert wrapper.run_ensemble.__name__ in("run_ensemble","run_ensemble")
+    assert wrapper.run_prediction.__name__ in("run_prediction_pipeline","run_prediction")
+    assert wrapper.run_walk_forward.__name__ in("run_walk_forward_validation","run_walk_forward")
 
 def test_run_single_task_success(fake_orchestrator):
     """PipelineOrchestrator.run_task should call the correct wrapper when task is valid."""
@@ -65,7 +82,7 @@ def test_run_pipeline_custom_tasks(fake_orchestrator):
 def test_run_pipeline_from_config(fake_orchestrator):
     """run_pipeline should use config-defined tasks when none are passed."""
     fake_orchestrator.run_pipeline()
-    # Both "train" and "predict" should run from DummyConfig
+    # Should run all tasks from DummyConfig
     assert "dummy.yaml" in fake_orchestrator._calls
 
 
@@ -113,3 +130,36 @@ def test_task_marker_skips(monkeypatch, fake_orchestrator, tmp_path):
     fake_orchestrator.run_task("train")
     # Nothing should be added to calls since it skipped
     assert fake_orchestrator._calls == {}
+
+def test_run_full_pipeline_all_tasks(monkeypatch, fake_orchestrator):
+    """run_pipeline should execute all defined tasks (train, predict, optimize, ensemble, walkforward)."""
+    # Override DummyConfig tasks
+    fake_orchestrator.config.pipeline.tasks = [
+        "train", "predict", "optimize", "ensemble", "walkforward"
+    ]
+
+    fake_orchestrator.run_pipeline()
+
+    # Each task should have been recorded in calls
+    assert "dummy.yaml" in fake_orchestrator._calls
+    assert len(fake_orchestrator._calls["dummy.yaml"]) == 5
+
+
+def test_pipeline_respects_task_markers(monkeypatch, fake_orchestrator, tmp_path):
+    """run_pipeline should skip tasks that already have completion markers."""
+    # Override DummyConfig tasks
+    fake_orchestrator.config.pipeline.tasks = ["train", "predict"]
+
+    # Patch task markers to tmp_path
+    train_marker = tmp_path / ".train_complete"
+    monkeypatch.setitem(orchestrator.TASK_MARKERS, "train", str(train_marker))
+    train_marker.parent.mkdir(parents=True, exist_ok=True)
+    train_marker.write_text("done")
+
+    fake_orchestrator.run_pipeline()
+
+    # "train" should be skipped, only "predict" should run
+    calls = fake_orchestrator._calls.get("dummy.yaml", [])
+    assert len(calls) == 1
+
+

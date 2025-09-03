@@ -6,7 +6,6 @@
 # defined in the `run_*.py` modules.
 #
 # These wrapper functions are the **ONLY recommended entrypoints** for:
-#   - The Orchestrator (`src/pipeline/orchestrator.py`)
 #   - The CLI (`main.py`)
 #   - Automation / Production runs
 #
@@ -27,7 +26,8 @@ src/pipeline/__init__.py
 Pipeline package initializer.
         
 In short:
-- Tests & direct imports → use these modules
+- Tests & direct imports → use these modules and it's classes/functions directly 
+-  such as(ModelTrainerPipeline for run_training.py).
 - Orchestrator → use `pipeline_wrapper`
 """
 # Bind submodules into the package namespace as *modules*

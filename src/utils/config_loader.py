@@ -1,9 +1,14 @@
 # src/utils/config_loader.py
 
+import importlib
 from pydantic import BaseModel
 from typing import List, Optional
 from utils.config import load_config  # your existing YAML loader
 
+
+# -------------------
+# Pydantic Configs
+# -------------------
 class DataConfig(BaseModel):
     X_train_path: str
     y_train_path: str
@@ -48,6 +53,10 @@ class FullConfig(BaseModel):
     logging: LoggingConfig
     pipeline: PipelineConfig
 
+
+# -------------------
+# Functions
+# -------------------
 def load_typed_config(config_path: str) -> FullConfig:
     """
     Load and validate the full config as a typed Pydantic model.
@@ -63,3 +72,21 @@ def load_typed_config(config_path: str) -> FullConfig:
     if 'model' in raw_config and 'class' in raw_config['model']:
         raw_config['model']['class_name'] = raw_config['model'].pop('class')
     return FullConfig(**raw_config)
+
+def instantiate_model(model_config: dict):
+    """
+    Dynamically import and instantiate a model from config.
+
+    Args:
+        model_config (dict): Dictionary with 'module', 'class_name', and 'params'.
+
+    Returns:
+        object: Instantiated model.
+    """
+    module_name = model_config["module"]
+    class_name = model_config["class_name"]
+    params = model_config.get("params", {})
+
+    module = importlib.import_module(module_name)
+    model_class = getattr(module, class_name)
+    return model_class(**params)

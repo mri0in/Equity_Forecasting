@@ -96,3 +96,17 @@ walk_forward:
   metrics: ["mape", "rmse", "r2"]      # Metrics to evaluate on each fold
   evaluation_output: "datalake/wfv/reports/wfv_summary.json"  # Aggregated report output
   oof_predictions_dir: "datalake/wfv/oof_predictions/"         # Optional: store out-of-fold predictions
+
+# ----------------------------
+# Section: Pipeline Orchestration
+# ----------------------------
+pipeline:
+  tasks:
+    - train
+    - optimize
+    - ensemble
+    - predict
+    - walkforward
+  retries: 2        # how many times to retry a failing task
+  strict: true      # if true → fail fast, if false → skip failed task and continue
+  

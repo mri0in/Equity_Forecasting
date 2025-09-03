@@ -2,7 +2,8 @@
 Central CLI entrypoint for the Equity Forecasting project.
 
 This module parses command-line arguments to trigger various
-functionalities: training, prediction, optimization, ensembling, or starting the API.
+functionalities through the Orchestrator: training, prediction,
+optimization, ensembling, walk-forward validation, or starting the API.
 
 Usage:
     python main.py <command> [--config CONFIG_PATH]
@@ -12,7 +13,8 @@ Supported commands:
     predict         Generate predictions using a trained model
     optimize        Run hyperparameter optimization
     ensemble        Run ensemble strategies (simple or meta-model based)
-    Walkforward     Run walk forward validator
+    walkforward     Run walk forward validator
+    pipeline        Run the full pipeline as defined in config
     serve           Start the API server
 
 Examples:
@@ -20,6 +22,8 @@ Examples:
     python main.py predict --config configs/predict_config.yaml
     python main.py optimize --config configs/optimize_config.yaml
     python main.py ensemble --config configs/ensemble_config.yaml --strategy meta
+    python main.py walkforward --config configs/walkforward_config.yaml
+    python main.py pipeline --config configs/full_config.yaml
     python main.py serve --host 0.0.0.0 --port 8000
 """
 
@@ -30,15 +34,12 @@ import sys
 # Add src/ to sys.path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
-from pipeline.run_training import run_training
-from pipeline.run_prediction import run_prediction
-from pipeline.run_optimizer import run_optimizer
-from pipeline.run_ensemble import run_ensemble
-from pipeline.run_walk_forward import run_walk_forward
+from pipeline.orchestrator import PipelineOrchestrator
 from api.main import start_api
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
+
 
 def validate_config_path(config_path: str) -> None:
     """
@@ -54,9 +55,10 @@ def validate_config_path(config_path: str) -> None:
         logger.error(f"Config file not found: {config_path}")
         raise FileNotFoundError(f"Config file not found: {config_path}")
 
+
 def main():
     """
-    Parse CLI arguments and dispatch to appropriate functionality.
+    Parse CLI arguments and dispatch commands to the Orchestrator or API.
     """
     parser = argparse.ArgumentParser(description="Equity Forecasting Project CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -85,12 +87,13 @@ def main():
         help="Ensemble strategy to use"
     )
 
-    #  --- Walkforward ---
+    # --- Walkforward ---
     walk_parser = subparsers.add_parser("walkforward", help="Run walk-forward validation")
-    walk_parser.add_argument(
-        "--config", "-c", required=True, help="Path to the WFV config YAML"
-    )
+    walk_parser.add_argument("--config", "-c", required=True, help="Path to the WFV config YAML")
 
+    # --- Pipeline ---
+    pipeline_parser = subparsers.add_parser("pipeline", help="Run full orchestrated pipeline")
+    pipeline_parser.add_argument("--config", "-c", required=True, help="Path to pipeline config YAML")
 
     # --- Serve ---
     serve_parser = subparsers.add_parser("serve", help="Start the API server")
@@ -100,39 +103,45 @@ def main():
     args = parser.parse_args()
 
     try:
-        # --- Dispatch Commands ---
+        if args.command == "serve":
+            logger.info(f"Launching API server on {args.host}:{args.port}")
+            start_api(host=args.host, port=args.port)
+            return
+
+        # --- Non-API commands use the orchestrator ---
+        validate_config_path(getattr(args, "config", None))
+        orchestrator = PipelineOrchestrator(config_path=args.config)
+
+        if args.command == "pipeline":
+            # Run the full pipeline as defined in YAML
+            logger.info(f"Running full orchestrated pipeline from config: {args.config}")
+            orchestrator.run_pipeline()
+
+
         if args.command == "train":
             validate_config_path(args.config)
-            logger.info(f"Starting training with config: {args.config}")
-            run_training(args.config)
+            orchestrator.run_pipeline(["train"])
 
         elif args.command == "predict":
             validate_config_path(args.config)
-            logger.info(f"Running prediction with config: {args.config}")
-            run_prediction(args.config)
+            orchestrator.run_pipeline(["predict"])
 
         elif args.command == "optimize":
             validate_config_path(args.config)
-            logger.info(f"Starting optimization: {args.optimizer} | Config: {args.config}")
-            run_optimizer(args.config, args.optimizer)
+            orchestrator.run_pipeline(["optimize"])
 
         elif args.command == "ensemble":
             validate_config_path(args.config)
-            logger.info(f"Running ensemble strategy: {args.strategy} | Config: {args.config}")
-            run_ensemble(args.config, args.strategy)
+            orchestrator.run_pipeline(["ensemble"])
 
         elif args.command == "walkforward":
             validate_config_path(args.config)
-            logger.info(f"Starting Walk forward validation: {args.config}")
-            run_walk_forward(args.config)
-
-        elif args.command == "serve":
-            logger.info(f"Launching API server on {args.host}:{args.port}")
-            start_api(host=args.host, port=args.port)
+            orchestrator.run_pipeline(["walkforward"])
 
     except Exception as e:
         logger.exception(f"Fatal error during execution: {e}")
         raise
+
 
 if __name__ == "__main__":
     main()

@@ -7,6 +7,22 @@ This module loads configuration, training data, selects the optimizer backend dy
 runs the hyperparameter search, and logs the progress.
 
 It is designed to be called from a single CLI entry point (e.g., src/main.py).
+
+⚠️ IMPORTANT WARNING FOR USERS & DEVELOPERS
+# For orchestration and end-user workflows, DO NOT call these classes
+# directly. Instead, always use the wrapper functions in:
+#
+#     src/pipeline/pipeline_wrapper.py
+#
+# Example:
+#     from src.pipeline.pipeline_wrapper import run_optimizer
+#     run_optimizer("configs/optimize_config.yaml")
+#
+# Reason:
+# The wrappers provide a consistent interface for the orchestrator and enforce
+# config-driven execution across the project. Direct class calls may bypass
+# orchestration safeguards (retries, logging, markers).
+# -------
 """
 
 from typing import Dict, Tuple

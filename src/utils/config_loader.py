@@ -1,7 +1,7 @@
 # src/utils/config_loader.py
 
 from pydantic import BaseModel
-from typing import Optional
+from typing import List, Optional
 from utils.config import load_config  # your existing YAML loader
 
 class DataConfig(BaseModel):
@@ -34,14 +34,19 @@ class EarlyStoppingConfig(BaseModel):
 
 class LoggingConfig(BaseModel):
     level: str
-    file: Optional[str]
+    file: Optional[str] = None
 
+class PipelineConfig(BaseModel):
+    tasks: List[str]
+    retries: int = 1
+    strict: bool = True
 class FullConfig(BaseModel):
     data: DataConfig
     model: ModelConfig
     training: TrainingConfig
     early_stopping: EarlyStoppingConfig
     logging: LoggingConfig
+    pipeline: PipelineConfig
 
 def load_typed_config(config_path: str) -> FullConfig:
     """

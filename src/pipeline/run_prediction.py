@@ -4,6 +4,22 @@ Pipeline script for running inference using a trained model and saving predictio
 - Dynamically loads model class and checkpoint based on config.
 - Runs prediction on specified dataset (validation/test).
 - Saves predictions to configured path.
+
+⚠️ IMPORTANT WARNING FOR USERS & DEVELOPERS
+# For orchestration and end-user workflows, DO NOT call these classes
+# directly. Instead, always use the wrapper functions in:
+#
+#     src/pipeline/pipeline_wrapper.py
+#
+# Example:
+#     from src.pipeline.pipeline_wrapper import run_prediction
+#     run_prediction("configs/predict_config.yaml")
+#
+# Reason:
+# The wrappers provide a consistent interface for the orchestrator and enforce
+# config-driven execution across the project. Direct class calls may bypass
+# orchestration safeguards (retries, logging, markers).
+# -------
 """
 
 import os

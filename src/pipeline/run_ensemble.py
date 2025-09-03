@@ -3,6 +3,21 @@ This module handles the orchestration of ensemble modeling.
 It loads base model predictions, applies an ensemble strategy,
 evaluates the final ensemble prediction, and logs the results.
 
+⚠️ IMPORTANT WARNING FOR USERS & DEVELOPERS
+# For orchestration and end-user workflows, DO NOT call these classes
+# directly. Instead, always use the wrapper functions in:
+#
+#     src/pipeline/pipeline_wrapper.py
+#
+# Example:
+#     from src.pipeline.pipeline_wrapper import run_ensemble
+#     run_ensemble("configs/ensemble_config.yaml")
+#
+# Reason:
+# The wrappers provide a consistent interface for the orchestrator and enforce
+# config-driven execution across the project. Direct class calls may bypass
+# orchestration safeguards (retries, logging, markers).
+# -------
 """
 
 # src/pipeline/run_ensemble.py

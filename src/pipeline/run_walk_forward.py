@@ -5,6 +5,22 @@ This module loads configuration, runs walk-forward validation using the
 WalkForwardValidator class, and logs summarized results.
 
 It is intended to be called by the single CLI entrypoint (e.g., src/main.py).
+
+⚠️ IMPORTANT WARNING FOR USERS & DEVELOPERS
+# For orchestration and end-user workflows, DO NOT call these classes
+# directly. Instead, always use the wrapper functions in:
+#
+#     src/pipeline/pipeline_wrapper.py
+#
+# Example:
+#     from src.pipeline.pipeline_wrapper import run_walk_forward
+#     run_walk_forward("configs/wfv_config.yaml")
+#
+# Reason:
+# The wrappers provide a consistent interface for the orchestrator and enforce
+# config-driven execution across the project. Direct class calls may bypass
+# orchestration safeguards (retries, logging, markers).
+# -------
 """
 
 from typing import Dict, Any

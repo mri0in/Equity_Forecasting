@@ -3,6 +3,7 @@ import sys
 import os
 from typing import Optional
 
+
 def get_logger(name: str, level: str = "INFO", log_file: Optional[str] = None) -> logging.Logger:
     """
     Create or retrieve a logger with optional file logging.
@@ -17,7 +18,8 @@ def get_logger(name: str, level: str = "INFO", log_file: Optional[str] = None) -
     """
     logger = logging.getLogger(name)
 
-    if not logger.hasHandlers():  # Avoid adding duplicate handlers
+    # FIX: check only this logger, not parent/root handlers
+    if not logger.handlers:  
         # Set level from config
         numeric_level = getattr(logging, level.upper(), logging.INFO)
         logger.setLevel(numeric_level)

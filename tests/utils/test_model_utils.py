@@ -1,4 +1,5 @@
 import io
+import types
 import yaml
 import pytest
 import importlib
@@ -42,13 +43,12 @@ def test_instantiate_model_success(monkeypatch):
         "params": {"lr": 0.01},
     }
 
-    # Patch importlib to return module with DummyModel
-    monkeypatch.setattr(importlib, "import_module", lambda _: {"DummyModel": DummyModel})
+    fake_module = types.SimpleNamespace(DummyModel=DummyModel)  # behaves like a module
+    monkeypatch.setattr(importlib, "import_module", lambda _: fake_module)
 
     model = mu.instantiate_model(cfg)
     assert isinstance(model, DummyModel)
     assert model.params == {"lr": 0.01}
-
 
 def test_instantiate_model_missing_class(monkeypatch):
     """instantiate_model should raise if class is missing."""
@@ -82,7 +82,9 @@ def test_load_config_and_model(monkeypatch, tmp_path):
     cfg_path = tmp_path / "config.yaml"
     cfg_path.write_text(yaml.dump(cfg))
 
-    monkeypatch.setattr(importlib, "import_module", lambda _: {"DummyModel": DummyModel})
+    fake_module = types.SimpleNamespace(DummyModel=DummyModel)  # behaves like a module
+    monkeypatch.setattr(importlib, "import_module", lambda _: fake_module)
+
 
     config, model = mu.load_config_and_model(str(cfg_path))
     assert config["extra"] == 123

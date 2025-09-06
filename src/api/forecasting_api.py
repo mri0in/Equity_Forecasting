@@ -1,0 +1,52 @@
+"""
+Forecasting API router.
+
+This module exposes endpoints for generating equity price forecasts.
+It connects the API layer with the predictor module, ensuring clean
+separation of concerns between request handling and business logic.
+"""
+
+import logging
+from fastapi import APIRouter, HTTPException, Query
+from typing import Dict
+
+# Business logic imports (predictor handles actual forecasting)
+from src.predictor.forecast_runner import ForecastRunner
+
+# ------------------------------------------------------------
+# Router & Logger Setup
+# ------------------------------------------------------------
+router = APIRouter()
+logger = logging.getLogger("forecasting_api")
+
+
+# ------------------------------------------------------------
+# Endpoints
+# ------------------------------------------------------------
+@router.get("/predict", response_model=Dict[str, float])
+async def predict_equity(
+    ticker: str = Query(..., description="Equity ticker symbol (e.g., RELIANCE, AAPL)"),
+    horizon: int = Query(5, description="Forecast horizon in days"),
+) -> Dict[str, float]:
+    """
+    Generate forecasts for a given equity ticker over the specified horizon.
+
+    Args:
+        ticker (str): Equity ticker symbol.
+        horizon (int): Number of days to forecast ahead.
+
+    Returns:
+        Dict[str, float]: Dictionary with forecasted values keyed by date.
+    """
+    try:
+        logger.info(f"Forecast request received: ticker={ticker}, horizon={horizon}")
+
+        runner = ForecastRunner(ticker=ticker, horizon=horizon)
+        forecast = runner.run_forecast()
+
+        logger.info(f"Forecast generated successfully for {ticker}")
+        return forecast
+
+    except Exception as e:
+        logger.error(f"Forecasting failed for {ticker}: {e}")
+        raise HTTPException(status_code=500, detail="Forecasting failed")

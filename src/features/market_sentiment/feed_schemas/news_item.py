@@ -23,14 +23,17 @@ class NewsItem:
     text: str
     date: datetime
     source: str
-    ticker: Optional[str] = None
-    url: Optional[str] = None
+    ticker: str = field(default="")  # Added ticker field
 
     def __post_init__(self):
         """
         Post-initialization validation and logging.
         Ensures required fields are not empty and logs creation.
         """
-        if not self.title or not self.text or not self.date or not self.source:
-            logger.warning(f"NewsItem missing required fields: {self}")
-        logger.info(f"NewsItem created: {self.title} from {self.source}")
+        missing = []
+        for attr in ["title", "text", "date", "source", "ticker"]:
+            if not getattr(self, attr):
+                missing.append(attr)
+        if missing:
+            logger.warning(f"NewsItem missing required fields: {missing} | {self}")
+        logger.info(f"NewsItem created: {self.title} from {self.source} for {self.ticker}")

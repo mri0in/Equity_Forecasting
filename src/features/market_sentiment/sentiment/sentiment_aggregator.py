@@ -12,6 +12,32 @@ from src.features.market_sentiment.processing.pre_processor import PreProcessor
 from src.features.market_sentiment.processing.extractor import Extractor
 from src.features.market_sentiment.sentiment.sentiment_model import SentimentModel
 
+"""
+Sentiment Aggregator Module
+
+This module is responsible for orchestrating the sentiment analysis pipeline
+across multiple market-related feeds (News, Press, Social, Web). It fetches
+raw content for a given equity, preprocesses and extracts relevant text,
+applies the sentiment model, and aggregates feed-level scores into a single
+equity sentiment score.
+
+Core Responsibilities:
+    - Initialize feed handlers for a given active equity
+    - Fetch and validate raw data from multiple sources
+    - Preprocess and extract relevant financial text
+    - Perform sentiment analysis using SentimentModel
+    - Aggregate sentiment across feeds into an overall equity sentiment metric
+    - Log detailed process flow for monitoring and debugging
+
+Output:
+    A dictionary containing:
+        - equity (str): Equity ticker or name
+        - feed_scores (Dict[str, float]): Sentiment scores per feed
+        - overall_sentiment (float): Aggregated sentiment score for the equity
+
+"""
+
+
 logger = setup_logger("sentiment_aggregator")
 
 

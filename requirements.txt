@@ -20,3 +20,4 @@ optuna                                      #Hyperparameter optimizer
 lightgbm                                    #Boost prediction performance
 seaborn                                     #Visualization
 feedparser                                  #News parsing
+transformers                                #NLP models

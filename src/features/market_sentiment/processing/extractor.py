@@ -1,76 +1,100 @@
 # src/features/market_sentiment/processing/extractor.py
-from typing import List, Dict
+"""
+Extractor Module (Processing Layer)
+
+This module provides functionality to extract financially relevant
+text from raw or preprocessed feed content. It applies heuristics,
+rules, or NLP techniques to keep only meaningful content for
+sentiment analysis.
+
+Core Responsibilities:
+    - Accept preprocessed text from feeds (news, social, press, web).
+    - Filter and retain financially relevant phrases or sentences.
+    - Remove non-financial, noisy, or irrelevant segments.
+    - Provide extendable architecture for future ML/NLP extractors.
+    - Log detailed process flow for monitoring and debugging.
+
+Output:
+    List of extracted text snippets ready for sentiment analysis.
+
+Directory Context:
+    src/features/market_sentiment/processing/
+"""
+
 import re
+from typing import List
+
 from src.utils import setup_logger
 
-logger = setup_logger("processing")
+# Configure logger
+logger = setup_logger("processing_extractor")
+
 
 class Extractor:
     """
-    Extracts entities, keywords, and stock tickers from text.
+    Extracts relevant financial text snippets from preprocessed content.
+
+    Current Implementation:
+        - Uses regex keyword matching for financial terms.
+        - Can be extended with NLP-based extractors (NER, topic modeling, etc.).
     """
 
-    def __init__(self, tickers_list: List[str] = None):
+    def __init__(self, keywords: List[str] = None):
         """
-        Args:
-            tickers_list (List[str], optional): List of valid stock tickers to detect.
-        """
-        self.tickers_list = tickers_list or []
-
-    def extract_tickers(self, text: str) -> List[str]:
-        """
-        Extract stock tickers from the text.
+        Initialize Extractor.
 
         Args:
-            text (str): Preprocessed text.
+            keywords (List[str], optional):
+                List of financial keywords to retain relevant text.
+                Defaults to a basic set if not provided.
+        """
+        default_keywords = [
+            "revenue", "profit", "loss", "growth", "decline",
+            "forecast", "guidance", "merger", "acquisition",
+            "investment", "market", "earnings", "cashflow",
+            "debt", "valuation", "regulation"
+        ]
+        self.keywords = keywords or default_keywords
+        self.pattern = re.compile(r"\b(" + "|".join(self.keywords) + r")\b", re.IGNORECASE)
+
+        logger.info("Extractor initialized with financial keywords.")
+
+    def extract_relevant_text(self, text: str) -> str:
+        """
+        Extract relevant financial segments from a single text.
+
+        Args:
+            text (str): Preprocessed input text.
 
         Returns:
-            List[str]: Detected tickers.
+            str: Extracted text containing relevant keywords.
+                 Empty string if no relevance found.
         """
         if not isinstance(text, str):
-            logger.warning(f"Expected string but got {type(text)}")
-            return []
+            logger.warning("Invalid input: expected string for extraction.")
+            return ""
 
-        # Simple pattern: uppercase words matching tickers list
-        tickers_found = [word for word in text.split() if word.upper() in self.tickers_list]
-        logger.info(f"Tickers found: {tickers_found}")
-        return tickers_found
+        sentences = re.split(r"(?<=[.!?])\s+", text)
+        relevant_sentences = [s for s in sentences if self.pattern.search(s)]
 
-    def extract_keywords(self, text: str, keywords: List[str]) -> List[str]:
+        logger.debug(
+            f"Extracted {len(relevant_sentences)} relevant sentences "
+            f"out of {len(sentences)} total."
+        )
+
+        return " ".join(relevant_sentences).strip()
+
+    def extract_batch(self, texts: List[str]) -> List[str]:
         """
-        Extract relevant keywords from text.
+        Extract relevant text for a batch of documents.
 
         Args:
-            text (str): Preprocessed text.
-            keywords (List[str]): Keywords to search for.
+            texts (List[str]): List of preprocessed text strings.
 
         Returns:
-            List[str]: Detected keywords in text.
+            List[str]: List of extracted relevant snippets.
         """
-        if not text or not keywords:
-            return []
+        if not isinstance(texts, list):
+            raise TypeError("Expected a list of strings for batch extraction.")
 
-        found_keywords = [kw for kw in keywords if re.search(rf"\b{re.escape(kw)}\b", text, re.IGNORECASE)]
-        logger.info(f"Keywords found: {found_keywords}")
-        return found_keywords
-
-    def extract_batch(self, texts: List[str], keywords: List[str] = None) -> List[Dict]:
-        """
-        Extract tickers and keywords for a batch of texts.
-
-        Args:
-            texts (List[str]): List of preprocessed texts.
-            keywords (List[str], optional): Keywords to search for.
-
-        Returns:
-            List[Dict]: Each dict has 'tickers' and 'keywords' keys.
-        """
-        logger.info(f"Extracting entities from batch of {len(texts)} texts")
-        result = []
-        for text in texts:
-            item = {
-                "tickers": self.extract_tickers(text),
-                "keywords": self.extract_keywords(text, keywords or [])
-            }
-            result.append(item)
-        return result
+        return [self.extract_relevant_text(t) for t in texts if isinstance(t, str)]

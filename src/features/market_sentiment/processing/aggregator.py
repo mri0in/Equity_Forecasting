@@ -1,62 +1,116 @@
 # src/features/market_sentiment/processing/aggregator.py
-from typing import List, Dict
-from collections import defaultdict
+"""
+Aggregator Module (Processing Layer)
+
+This module provides functionality to aggregate preprocessed and
+feature-extracted data into a structured format ready for downstream
+sentiment modeling or ML pipelines.
+
+Core Responsibilities:
+    - Accept processed items (from multiple feeds or processors).
+    - Validate and normalize the structure of inputs.
+    - Aggregate features into a single container (per equity).
+    - Provide modular, extendable architecture for new feature types.
+    - Log detailed process flow for debugging and monitoring.
+
+Output:
+    Dictionary containing aggregated features, e.g.:
+
+    {
+        "equity": "TCS",
+        "aggregated_texts": [...],
+        "features": {...}
+    }
+
+Directory Context:
+    src/features/market_sentiment/processing/
+"""
+
+import statistics
+from typing import List, Dict, Any, Optional, Union
+
 from src.utils import setup_logger
 
-logger = setup_logger("processing")
+# Configure logger
+logger = setup_logger("processing_aggregator")
+
 
 class Aggregator:
     """
-    Aggregates extracted information from multiple feed items.
-    Can summarize tickers, keywords, or sentiment scores.
+    Aggregates preprocessed and extracted features for a given equity.
+    Designed to integrate multiple feeds and processors into a single
+    normalized representation.
+
+    Example Use:
+        aggregator = Aggregator("INFY")
+        result = aggregator.aggregate_texts(["good growth", "weak demand"])
     """
 
-    def __init__(self):
-        pass
-
-    def aggregate_tickers(self, extracted_data: List[Dict]) -> Dict[str, int]:
+    def __init__(self, equity: str):
         """
-        Count occurrences of each ticker across multiple items.
+        Initialize the Aggregator for a specific equity.
 
         Args:
-            extracted_data (List[Dict]): Each dict should have a 'tickers' key with a list of tickers.
-
-        Returns:
-            Dict[str, int]: Ticker -> count
+            equity (str): Equity ticker or name.
         """
-        ticker_counts = defaultdict(int)
-        for item in extracted_data:
-            for ticker in item.get("tickers", []):
-                ticker_counts[ticker] += 1
-        logger.info(f"Aggregated tickers: {dict(ticker_counts)}")
-        return dict(ticker_counts)
+        if not isinstance(equity, str) or not equity.strip():
+            raise ValueError("Equity name must be a non-empty string.")
 
-    def aggregate_keywords(self, extracted_data: List[Dict]) -> Dict[str, int]:
+        self.equity = equity
+        self.aggregated_texts: List[str] = []
+        self.features: Dict[str, Any] = {}
+
+        logger.info(f"Aggregator initialized for equity: {self.equity}")
+
+    def aggregate_texts(self, texts: List[str]) -> Dict[str, Any]:
         """
-        Count occurrences of each keyword across multiple items.
+        Aggregate cleaned and extracted texts.
 
         Args:
-            extracted_data (List[Dict]): Each dict should have a 'keywords' key with a list of keywords.
+            texts (List[str]): List of preprocessed/extracted texts.
 
         Returns:
-            Dict[str, int]: Keyword -> count
+            Dict[str, Any]: Aggregated result containing equity,
+                            aggregated_texts, and features.
         """
-        keyword_counts = defaultdict(int)
-        for item in extracted_data:
-            for keyword in item.get("keywords", []):
-                keyword_counts[keyword] += 1
-        logger.info(f"Aggregated keywords: {dict(keyword_counts)}")
-        return dict(keyword_counts)
+        if not isinstance(texts, list):
+            raise TypeError("Expected a list of texts for aggregation.")
 
-    def aggregate_batch(self, extracted_data: List[Dict]) -> Dict[str, Dict[str, int]]:
-        """
-        Aggregate both tickers and keywords for a batch.
+        valid_texts = [t for t in texts if isinstance(t, str) and t.strip()]
 
-        Returns:
-            Dict[str, Dict[str, int]]: {'tickers': {...}, 'keywords': {...}}
-        """
-        logger.info(f"Aggregating batch of {len(extracted_data)} items")
+        if not valid_texts:
+            logger.warning(f"No valid texts provided for equity {self.equity}.")
+        else:
+            logger.info(
+                f"Aggregating {len(valid_texts)} valid texts for {self.equity}."
+            )
+
+        # Store for downstream
+        self.aggregated_texts.extend(valid_texts)
+
+        # Example feature: average text length
+        lengths = [len(t.split()) for t in valid_texts] if valid_texts else []
+        self.features["avg_text_length"] = (
+            statistics.mean(lengths) if lengths else 0
+        )
+        self.features["num_texts"] = len(valid_texts)
+
+        logger.debug(
+            f"Equity {self.equity}: "
+            f"avg_text_length={self.features['avg_text_length']}, "
+            f"num_texts={self.features['num_texts']}"
+        )
+
         return {
-            "tickers": self.aggregate_tickers(extracted_data),
-            "keywords": self.aggregate_keywords(extracted_data)
+            "equity": self.equity,
+            "aggregated_texts": self.aggregated_texts,
+            "features": self.features,
         }
+
+    def reset(self) -> None:
+        """
+        Reset aggregator state for reuse.
+        """
+        logger.info(f"Resetting aggregator for equity {self.equity}.")
+        self.aggregated_texts = []
+        self.features = {}

@@ -27,38 +27,105 @@ logger = setup_logger("processing")
 # ---------------------------
 
 
+"""
+Pre-processing module for raw market sentiment text data.
 
-class PreProcessor:
+This module is responsible for cleaning and normalizing text
+before it is passed into the NLP pipeline. It removes noise,
+standardizes text, and ensures input is ready for downstream
+sentiment analysis.
+Core Responsibilities:
+    - Remove HTML tags, URLs, special characters, and punctuation.
+    - Normalize casing (lowercase).
+    - Remove stopwords (using NLTK).
+    - Tokenize text into words.
+    - Provide batch processing for lists of texts.
+    - Log detailed process flow for monitoring and debugging.
+"""
+
+import re
+import logging
+from typing import List
+from nltk.corpus import stopwords
+
+# Configure logging for this module
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+
+class TextPreProcessor:
     """
-    Preprocesses text data for sentiment analysis or feature extraction.
+    Preprocess raw text for market sentiment analysis.
 
-    Methods:
-        clean_text: Cleans a single text string.
-        preprocess_batch: Cleans a list of text strings.
+    Responsibilities:
+    - Normalize casing (lowercase).
+    - Remove URLs, HTML tags, special characters, and numbers.
+    - Remove stopwords (using NLTK).
+    - Output clean tokenized text ready for NLP.
+
+    Example:
+        processor = TextPreProcessor()
+        cleaned = processor.clean_text("TCS reports RECORD profits! Visit http://example.com")
+        # "tcs reports record profits"
     """
 
-    @staticmethod
-    def clean_text(text: str) -> str:
+    def __init__(self, language: str = "english") -> None:
         """
-        Lowercase, remove punctuation and extra spaces.
+        Initialize the preprocessor with stopwords.
+        
+        Args:
+            language (str): Language for stopword filtering. Default = "english".
+        """
+        try:
+            self.stop_words = set(stopwords.words(language))
+            logger.debug("Stopwords loaded for language: %s", language)
+        except LookupError:
+            # Handle if NLTK stopwords not downloaded
+            logger.error("NLTK stopwords not found. Run nltk.download('stopwords').")
+            self.stop_words = set()
+
+    def clean_text(self, text: str) -> str:
+        """
+        Clean and normalize a single text string.
 
         Args:
             text (str): Raw text input.
 
         Returns:
-            str: Cleaned text.
+            str: Cleaned text string.
         """
         if not isinstance(text, str):
-            logger.warning(f"Expected string but got {type(text)}. Returning empty string.")
-            return ""
-        text = text.lower()
-        text = re.sub(r"[^a-zA-Z0-9\s]", "", text)
-        text = re.sub(r"\s+", " ", text).strip()
-        return text
+            logger.error("Input must be of type str, got %s", type(text))
+            raise ValueError("Input must be a string.")
 
-    def preprocess_batch(self, texts: List[str]) -> List[str]:
+        logger.debug("Original text: %s", text)
+
+        # Lowercase
+        text = text.lower()
+
+        # Remove URLs
+        text = re.sub(r"http\S+|www\S+|https\S+", "", text)
+
+        # Remove HTML tags
+        text = re.sub(r"<.*?>", "", text)
+
+        # Remove numbers
+        text = re.sub(r"\d+", "", text)
+
+        # Remove punctuation and special characters
+        text = re.sub(r"[^a-zA-Z\s]", "", text)
+
+        # Tokenize and remove stopwords
+        tokens = [word for word in text.split() if word not in self.stop_words]
+
+        cleaned_text = " ".join(tokens)
+        logger.debug("Cleaned text: %s", cleaned_text)
+
+        return cleaned_text
+
+    def batch_clean(self, texts: List[str]) -> List[str]:
         """
-        Cleans a batch of text strings.
+        Clean and normalize a batch of text strings.
 
         Args:
             texts (List[str]): List of raw text inputs.
@@ -66,5 +133,16 @@ class PreProcessor:
         Returns:
             List[str]: List of cleaned text strings.
         """
-        logger.info(f"Preprocessing batch of {len(texts)} texts")
-        return [self.clean_text(t) for t in texts]
+        if not isinstance(texts, list):
+            logger.error("Input must be of type list, got %s", type(texts))
+            raise ValueError("Input must be a list of strings.")
+
+        cleaned_batch = []
+        for t in texts:
+            try:
+                cleaned_batch.append(self.clean_text(t))
+            except Exception as e:
+                logger.warning("Skipping text due to error: %s", str(e))
+                continue
+
+        return cleaned_batch

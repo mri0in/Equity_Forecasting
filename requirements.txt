@@ -21,3 +21,6 @@ lightgbm                                    #Boost prediction performance
 seaborn                                     #Visualization
 feedparser                                  #News parsing
 transformers                                #NLP models
+graphviz                                    #Graph visualization
+ipywidgets                                  #Interactive widgets
+IPython                                     #Jupyter notebook

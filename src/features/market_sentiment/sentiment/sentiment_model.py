@@ -6,10 +6,10 @@ This module defines the SentimentModel class responsible for analyzing
 text from multiple market feeds and assigning sentiment scores.
 
 Features:
-- Supports multiple backends: TextBlob, FinBERT (extendable to custom models).
-- Produces discrete labels (positive, neutral, negative).
-- Produces continuous score in range [-1, 1].
-- Designed for modular extension (switch models easily).
+    - Supports multiple backends: TextBlob, Hugging Face models (FinBERT, etc.).
+    - Produces discrete labels (positive, neutral, negative).
+    - Produces continuous score in range [-1, 1].
+    - Designed for modular extension (easy model switching).
 
 Directory Context:
     src/features/market_sentiment/sentiment/
@@ -19,9 +19,9 @@ import logging
 from typing import List, Dict, Union
 
 from textblob import TextBlob  # lightweight sentiment analyzer
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
 
 from src.utils import setup_logger
+from src.features.market_sentiment.nlp_models.hf_model_manager import HFModelManager
 
 # Configure logger
 logger = setup_logger("sentiment_model")
@@ -32,8 +32,9 @@ class SentimentModel:
     Sentiment analysis model for financial texts.
 
     Backends:
-        - "textblob" → lightweight, quick polarity scoring.
-        - "finbert"  → domain-specific transformer for finance sentiment.
+        - "textblob"  → lightweight, quick polarity scoring.
+        - "finbert"   → Hugging Face finance-specific transformer.
+        - "hf:<name>" → Any Hugging Face model registered in ModelRegistry.
     """
 
     def __init__(self, model_name: str = "textblob"):
@@ -42,28 +43,29 @@ class SentimentModel:
 
         Args:
             model_name (str): Name of the sentiment model backend.
-                              Options: ["textblob", "finbert"]
+                              Options:
+                                - "textblob"
+                                - "finbert"
+                                - "hf:<registry_key>"
         """
         self.model_name = model_name
+        self.hf_manager = HFModelManager()
+        self.pipeline = None
 
-        if self.model_name == "finbert":
-            try:
-                logger.info("Loading FinBERT sentiment model...")
-                self.tokenizer = AutoTokenizer.from_pretrained("ProsusAI/finbert")
-                self.model = AutoModelForSequenceClassification.from_pretrained(
-                    "ProsusAI/finbert"
-                )
-                self.nlp_pipeline = pipeline(
-                    "sentiment-analysis",
-                    model=self.model,
-                    tokenizer=self.tokenizer
-                )
-                logger.info("FinBERT successfully loaded.")
-            except Exception as e:
-                logger.exception("Failed to load FinBERT. Falling back to TextBlob.")
-                self.model_name = "textblob"
-        else:
+        if self.model_name == "textblob":
             logger.info("SentimentModel initialized with TextBlob backend.")
+
+        elif self.model_name == "finbert":
+            logger.info("Loading FinBERT sentiment model from Hugging Face...")
+            self.pipeline = self.hf_manager.load_pipeline("finbert")
+
+        elif self.model_name.startswith("hf:"):
+            hf_key = self.model_name.split("hf:")[-1]
+            logger.info(f"Loading Hugging Face model from registry: {hf_key}")
+            self.pipeline = self.hf_manager.load_pipeline(hf_key)
+
+        else:
+            raise ValueError(f"Unsupported model backend: {self.model_name}")
 
     def analyze_text(self, text: str) -> Dict[str, Union[str, float]]:
         """
@@ -87,23 +89,23 @@ class SentimentModel:
                 score = float(analysis.sentiment.polarity)
                 label = self._map_score_to_label(score)
 
-            elif self.model_name == "finbert":
-                result = self.nlp_pipeline(text)[0]
+            else:  # Hugging Face models (FinBERT or registry models)
+                result = self.pipeline(text)[0]
                 raw_label = result["label"].lower()  # e.g., "positive"
-                score = float(result["score"]) if raw_label != "neutral" else 0.0
 
-                # Convert FinBERT labels to our schema
+                # Convert HF label → unified schema
                 label = (
-                    "positive" if raw_label == "positive"
-                    else "negative" if raw_label == "negative"
-                    else "neutral"
+                    "positive" if "pos" in raw_label else
+                    "negative" if "neg" in raw_label else
+                    "neutral"
                 )
 
-                # Map score to range [-1, 1]
-                score = score if label == "positive" else -score if label == "negative" else 0.0
-
-            else:
-                raise ValueError(f"Unsupported model: {self.model_name}")
+                # Map raw probability score into [-1, 1]
+                score = float(result["score"])
+                if label == "negative":
+                    score = -score
+                elif label == "neutral":
+                    score = 0.0
 
             logger.info(f"Sentiment analysis completed. Label={label}, Score={score:.3f}")
             return {"label": label, "score": score}

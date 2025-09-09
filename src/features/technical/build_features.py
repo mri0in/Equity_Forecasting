@@ -1,8 +1,8 @@
 import pandas as pd
-from features.candle_features import CandleFeatureBuilder
-from features.trend_features import TrendFeatureBuilder
-from features.momentum_features import MomentumFeatureBuilder
-from features.volume_features import VolumeFeatureBuilder
+from features.technical.candle_features import CandleFeatureBuilder
+from features.technical.trend_features import TrendFeatureBuilder
+from features.technical.momentum_features import MomentumFeatureBuilder
+from features.technical.volume_features import VolumeFeatureBuilder
 from utils.logger import get_logger
 
 # Initialize module-level logger

@@ -1,21 +1,207 @@
-print("""
-User Input (Dashboard)
-          │
-          ▼
-  set_active_equity()
-          │
-          ▼
-    ACTIVE_EQUITY  (global state)
-       ┌───────┴────────┐
-       │                │
-  Market Sentiment   Forecasting
-  ┌─────────────┐   ┌──────────────┐
-  │Feeds → APIs │   │Historical    │
-  │Preprocess   │   │Data Loader   │
-  │Extractor    │   │Forecast Model│
-  │Aggregator   │   └──────────────┘
-  └─────────────┘
-       │
-       ▼
-Combined Output → Dashboard
-""")
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "id": "430a0332",
+   "metadata": {},
+   "outputs": [
+    {
+     "ename": "NameError",
+     "evalue": "name 'null' is not defined",
+     "output_type": "error",
+     "traceback": [
+      "\u001b[31m---------------------------------------------------------------------------\u001b[39m",
+      "\u001b[31mNameError\u001b[39m                                 Traceback (most recent call last)",
+      "\u001b[36mCell\u001b[39m\u001b[36m \u001b[39m\u001b[32mIn[4]\u001b[39m\u001b[32m, line 70\u001b[39m\n\u001b[32m      1\u001b[39m {\n\u001b[32m      2\u001b[39m  \u001b[33m\"\u001b[39m\u001b[33mcells\u001b[39m\u001b[33m\"\u001b[39m: [\n\u001b[32m      3\u001b[39m   {\n\u001b[32m      4\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mcell_type\u001b[39m\u001b[33m\"\u001b[39m: \u001b[33m\"\u001b[39m\u001b[33mmarkdown\u001b[39m\u001b[33m\"\u001b[39m,\n\u001b[32m      5\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mmetadata\u001b[39m\u001b[33m\"\u001b[39m: {},\n\u001b[32m      6\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33msource\u001b[39m\u001b[33m\"\u001b[39m: [\n\u001b[32m      7\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m# Equity Forecasting & Market Sentiment Blueprint\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m      8\u001b[39m     \u001b[33m\"\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m      9\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33mThis notebook demonstrates the **top-down workflow** of the Equity Forecasting project, including Market Sentiment analysis and Forecasting models.\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     10\u001b[39m     \u001b[33m\"\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     11\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33mIt is intended as a **demo/blueprint** for understanding module interaction and data flow.\u001b[39m\u001b[33m\"\u001b[39m\n\u001b[32m     12\u001b[39m    ]\n\u001b[32m     13\u001b[39m   },\n\u001b[32m     14\u001b[39m   {\n\u001b[32m     15\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mcell_type\u001b[39m\u001b[33m\"\u001b[39m: \u001b[33m\"\u001b[39m\u001b[33mmarkdown\u001b[39m\u001b[33m\"\u001b[39m,\n\u001b[32m     16\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mmetadata\u001b[39m\u001b[33m\"\u001b[39m: {},\n\u001b[32m     17\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33msource\u001b[39m\u001b[33m\"\u001b[39m: [\n\u001b[32m     18\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m## 1️⃣ Project Overview Flow Diagram\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     19\u001b[39m     \u001b[33m\"\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     20\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m```text\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     21\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33mUser Input (Dashboard)\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     22\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m          │\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     23\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m          ▼\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     24\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m  set_active_equity()\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     25\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m          │\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     26\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m          ▼\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     27\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m    ACTIVE_EQUITY  (global state)\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     28\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m       ┌───────┴────────┐\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     29\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m       │                │\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     30\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m  Market Sentiment   Forecasting\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     31\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m  ┌─────────────┐   ┌──────────────┐\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     32\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m  │Feeds → APIs │   │Historical    │\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     33\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m  │Preprocess   │   │Data Loader   │\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     34\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m  │Extractor    │   │Forecast Model│\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     35\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m  │Aggregator   │   └──────────────┘\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     36\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m  └─────────────┘\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     37\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m       │\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     38\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m       ▼\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     39\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33mCombined Output → Dashboard\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     40\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m```\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     41\u001b[39m     \u001b[33m\"\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     42\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m### Notes:\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     43\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m- **Feeds → APIs:** NewsFeed, PressFeed, SocialFeed, WebFeed\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     44\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m- **Preprocess & Extractor:** Clean and extract relevant financial text\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     45\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m- **Aggregator:** SentimentAggregator using TextBlob / FinBERT\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     46\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m- **Forecast Model:** LSTM or Linear Regression for equity price prediction\u001b[39m\u001b[33m\"\u001b[39m\n\u001b[32m     47\u001b[39m    ]\n\u001b[32m     48\u001b[39m   },\n\u001b[32m     49\u001b[39m   {\n\u001b[32m     50\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mcell_type\u001b[39m\u001b[33m\"\u001b[39m: \u001b[33m\"\u001b[39m\u001b[33mmarkdown\u001b[39m\u001b[33m\"\u001b[39m,\n\u001b[32m     51\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mmetadata\u001b[39m\u001b[33m\"\u001b[39m: {},\n\u001b[32m     52\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33msource\u001b[39m\u001b[33m\"\u001b[39m: [\n\u001b[32m     53\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m## 2️⃣ Active Equity Example\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     54\u001b[39m     \u001b[33m\"\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     55\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33mSet a global active equity that will be used across sentiment and forecasting modules.\u001b[39m\u001b[33m\"\u001b[39m\n\u001b[32m     56\u001b[39m    ]\n\u001b[32m     57\u001b[39m   },\n\u001b[32m     58\u001b[39m   {\n\u001b[32m     59\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mcell_type\u001b[39m\u001b[33m\"\u001b[39m: \u001b[33m\"\u001b[39m\u001b[33mcode\u001b[39m\u001b[33m\"\u001b[39m,\n\u001b[32m     60\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mmetadata\u001b[39m\u001b[33m\"\u001b[39m: {},\n\u001b[32m     61\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33msource\u001b[39m\u001b[33m\"\u001b[39m: [\n\u001b[32m     62\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33mfrom src.features.active_equity.active_equity import set_active_equity, get_active_equity\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     63\u001b[39m     \u001b[33m\"\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     64\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m# Set active equity\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     65\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33mset_active_equity(\u001b[39m\u001b[33m'\u001b[39m\u001b[33mAAPL\u001b[39m\u001b[33m'\u001b[39m\u001b[33m)\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     66\u001b[39m     \u001b[33m\"\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     67\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m# Check active equity\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     68\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33mget_active_equity()\u001b[39m\u001b[33m\"\u001b[39m\n\u001b[32m     69\u001b[39m    ],\n\u001b[32m---> \u001b[39m\u001b[32m70\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mexecution_count\u001b[39m\u001b[33m\"\u001b[39m: \u001b[43mnull\u001b[49m, \u001b[38;5;66;03m# type: ignore # type: ignore\u001b[39;00m\n\u001b[32m     71\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33moutputs\u001b[39m\u001b[33m\"\u001b[39m: []\n\u001b[32m     72\u001b[39m   },\n\u001b[32m     73\u001b[39m   {\n\u001b[32m     74\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mcell_type\u001b[39m\u001b[33m\"\u001b[39m: \u001b[33m\"\u001b[39m\u001b[33mmarkdown\u001b[39m\u001b[33m\"\u001b[39m,\n\u001b[32m     75\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mmetadata\u001b[39m\u001b[33m\"\u001b[39m: {},\n\u001b[32m     76\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33msource\u001b[39m\u001b[33m\"\u001b[39m: [\n\u001b[32m     77\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m## 3️⃣ Market Sentiment Demo\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     78\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33mFetch and analyze sentiment for the active equity using multiple feeds.\u001b[39m\u001b[33m\"\u001b[39m\n\u001b[32m     79\u001b[39m    ]\n\u001b[32m     80\u001b[39m   },\n\u001b[32m     81\u001b[39m   {\n\u001b[32m     82\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mcell_type\u001b[39m\u001b[33m\"\u001b[39m: \u001b[33m\"\u001b[39m\u001b[33mcode\u001b[39m\u001b[33m\"\u001b[39m,\n\u001b[32m     83\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mmetadata\u001b[39m\u001b[33m\"\u001b[39m: {},\n\u001b[32m     84\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33msource\u001b[39m\u001b[33m\"\u001b[39m: [\n\u001b[32m     85\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33mfrom src.features.market_sentiment.sentiment.sentiment_aggregator import SentimentAggregator\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     86\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33mfrom src.features.active_equity.active_equity import get_active_equity\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     87\u001b[39m     \u001b[33m\"\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     88\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33maggregator = SentimentAggregator(get_active_equity(), model_backend=\u001b[39m\u001b[33m'\u001b[39m\u001b[33mfinbert\u001b[39m\u001b[33m'\u001b[39m\u001b[33m)\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     89\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33msentiment_result = aggregator.run()\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m     90\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33msentiment_result\u001b[39m\u001b[33m\"\u001b[39m\n\u001b[32m     91\u001b[39m    ],\n\u001b[32m     92\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mexecution_count\u001b[39m\u001b[33m\"\u001b[39m: null, \u001b[38;5;66;03m# type: ignore\u001b[39;00m\n\u001b[32m     93\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33moutputs\u001b[39m\u001b[33m\"\u001b[39m: []\n\u001b[32m     94\u001b[39m   },\n\u001b[32m     95\u001b[39m   {\n\u001b[32m     96\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mcell_type\u001b[39m\u001b[33m\"\u001b[39m: \u001b[33m\"\u001b[39m\u001b[33mmarkdown\u001b[39m\u001b[33m\"\u001b[39m,\n\u001b[32m     97\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mmetadata\u001b[39m\u001b[33m\"\u001b[39m: {},\n\u001b[32m     98\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33msource\u001b[39m\u001b[33m\"\u001b[39m: [\n\u001b[32m     99\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m## 4️⃣ Forecasting Demo\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m    100\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33mUse historical data to predict future prices for the active equity.\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m    101\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33mPlaceholder for LSTM/Linear Regression pipeline.\u001b[39m\u001b[33m\"\u001b[39m\n\u001b[32m    102\u001b[39m    ]\n\u001b[32m    103\u001b[39m   },\n\u001b[32m    104\u001b[39m   {\n\u001b[32m    105\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mcell_type\u001b[39m\u001b[33m\"\u001b[39m: \u001b[33m\"\u001b[39m\u001b[33mcode\u001b[39m\u001b[33m\"\u001b[39m,\n\u001b[32m    106\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mmetadata\u001b[39m\u001b[33m\"\u001b[39m: {},\n\u001b[32m    107\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33msource\u001b[39m\u001b[33m\"\u001b[39m: [\n\u001b[32m    108\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m# Example placeholder\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m    109\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m# from src.models.lstm_model import LSTMModel\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m    110\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m# model = LSTMModel()\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m    111\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m# prediction = model.predict(get_active_equity())\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m    112\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m# prediction\u001b[39m\u001b[33m\"\u001b[39m\n\u001b[32m    113\u001b[39m    ],\n\u001b[32m    114\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mexecution_count\u001b[39m\u001b[33m\"\u001b[39m: null, \u001b[38;5;66;03m# type: ignore\u001b[39;00m\n\u001b[32m    115\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33moutputs\u001b[39m\u001b[33m\"\u001b[39m: []\n\u001b[32m    116\u001b[39m   },\n\u001b[32m    117\u001b[39m   {\n\u001b[32m    118\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mcell_type\u001b[39m\u001b[33m\"\u001b[39m: \u001b[33m\"\u001b[39m\u001b[33mmarkdown\u001b[39m\u001b[33m\"\u001b[39m,\n\u001b[32m    119\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mmetadata\u001b[39m\u001b[33m\"\u001b[39m: {},\n\u001b[32m    120\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33msource\u001b[39m\u001b[33m\"\u001b[39m: [\n\u001b[32m    121\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m## 5️⃣ Combined Output\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m    122\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33mCombine sentiment scores and forecasted price for dashboard display.\u001b[39m\u001b[33m\"\u001b[39m\n\u001b[32m    123\u001b[39m    ]\n\u001b[32m    124\u001b[39m   },\n\u001b[32m    125\u001b[39m   {\n\u001b[32m    126\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mcell_type\u001b[39m\u001b[33m\"\u001b[39m: \u001b[33m\"\u001b[39m\u001b[33mcode\u001b[39m\u001b[33m\"\u001b[39m,\n\u001b[32m    127\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mmetadata\u001b[39m\u001b[33m\"\u001b[39m: {},\n\u001b[32m    128\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33msource\u001b[39m\u001b[33m\"\u001b[39m: [\n\u001b[32m    129\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33mcombined_output = \u001b[39m\u001b[33m{\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m    130\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m    \u001b[39m\u001b[33m'\u001b[39m\u001b[33mequity\u001b[39m\u001b[33m'\u001b[39m\u001b[33m: get_active_equity(),\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m    131\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m    \u001b[39m\u001b[33m'\u001b[39m\u001b[33msentiment\u001b[39m\u001b[33m'\u001b[39m\u001b[33m: sentiment_result,\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m    132\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m    \u001b[39m\u001b[33m'\u001b[39m\u001b[33mforecast\u001b[39m\u001b[33m'\u001b[39m\u001b[33m: None  # replace with actual prediction once implemented\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m    133\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33m}\u001b[39m\u001b[38;5;130;01m\\n\u001b[39;00m\u001b[33m\"\u001b[39m,\n\u001b[32m    134\u001b[39m     \u001b[33m\"\u001b[39m\u001b[33mcombined_output\u001b[39m\u001b[33m\"\u001b[39m\n\u001b[32m    135\u001b[39m    ],\n\u001b[32m    136\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mexecution_count\u001b[39m\u001b[33m\"\u001b[39m: null, \u001b[38;5;66;03m# type: ignore\u001b[39;00m\n\u001b[32m    137\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33moutputs\u001b[39m\u001b[33m\"\u001b[39m: []\n\u001b[32m    138\u001b[39m   }\n\u001b[32m    139\u001b[39m  ],\n\u001b[32m    140\u001b[39m  \u001b[33m\"\u001b[39m\u001b[33mmetadata\u001b[39m\u001b[33m\"\u001b[39m: {\n\u001b[32m    141\u001b[39m   \u001b[33m\"\u001b[39m\u001b[33mkernelspec\u001b[39m\u001b[33m\"\u001b[39m: {\n\u001b[32m    142\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mdisplay_name\u001b[39m\u001b[33m\"\u001b[39m: \u001b[33m\"\u001b[39m\u001b[33mPython 3\u001b[39m\u001b[33m\"\u001b[39m,\n\u001b[32m    143\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mlanguage\u001b[39m\u001b[33m\"\u001b[39m: \u001b[33m\"\u001b[39m\u001b[33mpython\u001b[39m\u001b[33m\"\u001b[39m,\n\u001b[32m    144\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mname\u001b[39m\u001b[33m\"\u001b[39m: \u001b[33m\"\u001b[39m\u001b[33mpython3\u001b[39m\u001b[33m\"\u001b[39m\n\u001b[32m    145\u001b[39m   },\n\u001b[32m    146\u001b[39m   \u001b[33m\"\u001b[39m\u001b[33mlanguage_info\u001b[39m\u001b[33m\"\u001b[39m: {\n\u001b[32m    147\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mname\u001b[39m\u001b[33m\"\u001b[39m: \u001b[33m\"\u001b[39m\u001b[33mpython\u001b[39m\u001b[33m\"\u001b[39m,\n\u001b[32m    148\u001b[39m    \u001b[33m\"\u001b[39m\u001b[33mversion\u001b[39m\u001b[33m\"\u001b[39m: \u001b[33m\"\u001b[39m\u001b[33m3.11\u001b[39m\u001b[33m\"\u001b[39m\n\u001b[32m    149\u001b[39m   }\n\u001b[32m    150\u001b[39m  },\n\u001b[32m    151\u001b[39m  \u001b[33m\"\u001b[39m\u001b[33mnbformat\u001b[39m\u001b[33m\"\u001b[39m: \u001b[32m4\u001b[39m,\n\u001b[32m    152\u001b[39m  \u001b[33m\"\u001b[39m\u001b[33mnbformat_minor\u001b[39m\u001b[33m\"\u001b[39m: \u001b[32m5\u001b[39m\n\u001b[32m    153\u001b[39m }\n",
+      "\u001b[31mNameError\u001b[39m: name 'null' is not defined"
+     ]
+    }
+   ],
+   "source": [
+    "{\n",
+    " \"cells\": [\n",
+    "  {\n",
+    "   \"cell_type\": \"markdown\",\n",
+    "   \"metadata\": {},\n",
+    "   \"source\": [\n",
+    "    \"# Equity Forecasting & Market Sentiment Blueprint\\n\",\n",
+    "    \"\\n\",\n",
+    "    \"This notebook demonstrates the **top-down workflow** of the Equity Forecasting project, including Market Sentiment analysis and Forecasting models.\\n\",\n",
+    "    \"\\n\",\n",
+    "    \"It is intended as a **demo/blueprint** for understanding module interaction and data flow.\"\n",
+    "   ]\n",
+    "  },\n",
+    "  {\n",
+    "   \"cell_type\": \"markdown\",\n",
+    "   \"metadata\": {},\n",
+    "   \"source\": [\n",
+    "    \"## 1️⃣ Project Overview Flow Diagram\\n\",\n",
+    "    \"\\n\",\n",
+    "    \"```text\\n\",\n",
+    "    \"User Input (Dashboard)\\n\",\n",
+    "    \"          │\\n\",\n",
+    "    \"          ▼\\n\",\n",
+    "    \"  set_active_equity()\\n\",\n",
+    "    \"          │\\n\",\n",
+    "    \"          ▼\\n\",\n",
+    "    \"    ACTIVE_EQUITY  (global state)\\n\",\n",
+    "    \"       ┌───────┴────────┐\\n\",\n",
+    "    \"       │                │\\n\",\n",
+    "    \"  Market Sentiment   Forecasting\\n\",\n",
+    "    \"  ┌─────────────┐   ┌──────────────┐\\n\",\n",
+    "    \"  │Feeds → APIs │   │Historical    │\\n\",\n",
+    "    \"  │Preprocess   │   │Data Loader   │\\n\",\n",
+    "    \"  │Extractor    │   │Forecast Model│\\n\",\n",
+    "    \"  │Aggregator   │   └──────────────┘\\n\",\n",
+    "    \"  └─────────────┘\\n\",\n",
+    "    \"       │\\n\",\n",
+    "    \"       ▼\\n\",\n",
+    "    \"Combined Output → Dashboard\\n\",\n",
+    "    \"```\\n\",\n",
+    "    \"\\n\",\n",
+    "    \"### Notes:\\n\",\n",
+    "    \"- **Feeds → APIs:** NewsFeed, PressFeed, SocialFeed, WebFeed\\n\",\n",
+    "    \"- **Preprocess & Extractor:** Clean and extract relevant financial text\\n\",\n",
+    "    \"- **Aggregator:** SentimentAggregator using TextBlob / FinBERT\\n\",\n",
+    "    \"- **Forecast Model:** LSTM or Linear Regression for equity price prediction\"\n",
+    "   ]\n",
+    "  },\n",
+    "  {\n",
+    "   \"cell_type\": \"markdown\",\n",
+    "   \"metadata\": {},\n",
+    "   \"source\": [\n",
+    "    \"## 2️⃣ Active Equity Example\\n\",\n",
+    "    \"\\n\",\n",
+    "    \"Set a global active equity that will be used across sentiment and forecasting modules.\"\n",
+    "   ]\n",
+    "  },\n",
+    "  {\n",
+    "   \"cell_type\": \"code\",\n",
+    "   \"metadata\": {},\n",
+    "   \"source\": [\n",
+    "    \"from src.features.active_equity.active_equity import set_active_equity, get_active_equity\\n\",\n",
+    "    \"\\n\",\n",
+    "    \"# Set active equity\\n\",\n",
+    "    \"set_active_equity('AAPL')\\n\",\n",
+    "    \"\\n\",\n",
+    "    \"# Check active equity\\n\",\n",
+    "    \"get_active_equity()\"\n",
+    "   ],\n",
+    "   \"execution_count\": null, # type: ignore # type: ignore\n",
+    "   \"outputs\": []\n",
+    "  },\n",
+    "  {\n",
+    "   \"cell_type\": \"markdown\",\n",
+    "   \"metadata\": {},\n",
+    "   \"source\": [\n",
+    "    \"## 3️⃣ Market Sentiment Demo\\n\",\n",
+    "    \"Fetch and analyze sentiment for the active equity using multiple feeds.\"\n",
+    "   ]\n",
+    "  },\n",
+    "  {\n",
+    "   \"cell_type\": \"code\",\n",
+    "   \"metadata\": {},\n",
+    "   \"source\": [\n",
+    "    \"from src.features.market_sentiment.sentiment.sentiment_aggregator import SentimentAggregator\\n\",\n",
+    "    \"from src.features.active_equity.active_equity import get_active_equity\\n\",\n",
+    "    \"\\n\",\n",
+    "    \"aggregator = SentimentAggregator(get_active_equity(), model_backend='finbert')\\n\",\n",
+    "    \"sentiment_result = aggregator.run()\\n\",\n",
+    "    \"sentiment_result\"\n",
+    "   ],\n",
+    "   \"execution_count\": null, # type: ignore\n",
+    "   \"outputs\": []\n",
+    "  },\n",
+    "  {\n",
+    "   \"cell_type\": \"markdown\",\n",
+    "   \"metadata\": {},\n",
+    "   \"source\": [\n",
+    "    \"## 4️⃣ Forecasting Demo\\n\",\n",
+    "    \"Use historical data to predict future prices for the active equity.\\n\",\n",
+    "    \"Placeholder for LSTM/Linear Regression pipeline.\"\n",
+    "   ]\n",
+    "  },\n",
+    "  {\n",
+    "   \"cell_type\": \"code\",\n",
+    "   \"metadata\": {},\n",
+    "   \"source\": [\n",
+    "    \"# Example placeholder\\n\",\n",
+    "    \"# from src.models.lstm_model import LSTMModel\\n\",\n",
+    "    \"# model = LSTMModel()\\n\",\n",
+    "    \"# prediction = model.predict(get_active_equity())\\n\",\n",
+    "    \"# prediction\"\n",
+    "   ],\n",
+    "   \"execution_count\": null, # type: ignore\n",
+    "   \"outputs\": []\n",
+    "  },\n",
+    "  {\n",
+    "   \"cell_type\": \"markdown\",\n",
+    "   \"metadata\": {},\n",
+    "   \"source\": [\n",
+    "    \"## 5️⃣ Combined Output\\n\",\n",
+    "    \"Combine sentiment scores and forecasted price for dashboard display.\"\n",
+    "   ]\n",
+    "  },\n",
+    "  {\n",
+    "   \"cell_type\": \"code\",\n",
+    "   \"metadata\": {},\n",
+    "   \"source\": [\n",
+    "    \"combined_output = {\\n\",\n",
+    "    \"    'equity': get_active_equity(),\\n\",\n",
+    "    \"    'sentiment': sentiment_result,\\n\",\n",
+    "    \"    'forecast': None  # replace with actual prediction once implemented\\n\",\n",
+    "    \"}\\n\",\n",
+    "    \"combined_output\"\n",
+    "   ],\n",
+    "   \"execution_count\": null, # type: ignore\n",
+    "   \"outputs\": []\n",
+    "  }\n",
+    " ],\n",
+    " \"metadata\": {\n",
+    "  \"kernelspec\": {\n",
+    "   \"display_name\": \"Python 3\",\n",
+    "   \"language\": \"python\",\n",
+    "   \"name\": \"python3\"\n",
+    "  },\n",
+    "  \"language_info\": {\n",
+    "   \"name\": \"python\",\n",
+    "   \"version\": \"3.11\"\n",
+    "  }\n",
+    " },\n",
+    " \"nbformat\": 4,\n",
+    " \"nbformat_minor\": 5\n",
+    "}\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "69dcc518",
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "C:\\Users\\Admin\\.virtualenvs\\equity_forecasting_env",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.13.2"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

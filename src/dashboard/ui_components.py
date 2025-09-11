@@ -2,7 +2,7 @@
 
 import streamlit as st
 from typing import Optional
-from dashboard.history_manager import EquityHistory
+from .history_manager import EquityHistory
 import logging
 
 # -------------------------------
@@ -38,7 +38,7 @@ class SidebarUI:
         """
         st.sidebar.title("Equity Dashboard Controls")
 
-        # ---- 1️⃣ Custom Equity Input ----
+        # ---- Custom Equity Input ----
         custom_equity = st.sidebar.text_input(
             "Select an Equity",
             placeholder="Select an Equity"
@@ -72,7 +72,7 @@ class SidebarUI:
             "Forecast Horizon (days)",
             min_value=1,
             max_value=30,
-            value=7
+            value=1
         )
 
         # ---- Panel Control Buttons ----

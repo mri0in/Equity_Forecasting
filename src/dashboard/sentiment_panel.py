@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class SentimentPanel:
     """
     Displays feed-wise sentiment and overall sentiment gauge for a selected equity.
-    
+
     Features:
     - Bullet chart for individual feeds (News, Press, Social, Web)
     - Circular gauge for overall sentiment
@@ -30,7 +30,7 @@ class SentimentPanel:
         self.feed_scores: Dict[str, float] = {}
         self.overall_sentiment: float = 0.0
 
-    def simulate_sentiment(self):
+    def simulate_sentiment(self) -> None:
         """
         Simulate sentiment scores for demonstration purposes.
         Real implementation should fetch from aggregator.
@@ -38,12 +38,19 @@ class SentimentPanel:
         np.random.seed(hash(self.equity) % 2**32)  # deterministic per equity
         self.feed_scores = {feed: np.round(np.random.uniform(-1, 1), 2) for feed in self.feeds}
         self.overall_sentiment = np.round(np.mean(list(self.feed_scores.values())), 2)
-        logger.info(f"Simulated sentiment for {self.equity}: {self.feed_scores}, overall {self.overall_sentiment}")
+        logger.info(
+            f"Simulated sentiment for {self.equity}: {self.feed_scores}, "
+            f"overall {self.overall_sentiment}"
+        )
 
-    def render_bullet_chart(self):
+    def render_feed_scores(self) -> None:
         """
-        Render feed-wise sentiment as a horizontal bar (bullet chart)
+        Render feed-wise sentiment as a horizontal bullet-style bar chart.
         """
+        if not self.feed_scores:
+            st.warning("No feed scores available. Did you call simulate_sentiment()?") 
+            return
+
         colors = ['green' if s > 0 else 'red' if s < 0 else 'gray' for s in self.feed_scores.values()]
         fig = go.Figure(
             go.Bar(
@@ -57,21 +64,24 @@ class SentimentPanel:
         )
         fig.update_layout(
             title=f"{self.equity} - Feed-wise Sentiment",
-            xaxis=dict(title="Sentiment Score [-1,1]", range=[-1,1]),
+            xaxis=dict(title="Sentiment Score [-1,1]", range=[-1, 1]),
             yaxis=dict(title="Feeds"),
             template="plotly_white",
-            height=300
+            height=250
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    def render_overall_gauge(self):
+    def render_overall_gauge(self) -> None:
         """
-        Render overall sentiment as a circular gauge with needle
+        Render overall sentiment as a circular gauge with needle.
         """
+        if self.overall_sentiment == 0.0 and not self.feed_scores:
+            st.warning("No overall sentiment available. Did you call simulate_sentiment()?") 
+            return
+
         fig = go.Figure(go.Indicator(
-            mode="gauge+number+delta",
+            mode="gauge+number",
             value=self.overall_sentiment,
-            number={'suffix': ""},
             gauge={
                 'axis': {'range': [-1, 1]},
                 'bar': {'color': "darkblue"},
@@ -87,17 +97,20 @@ class SentimentPanel:
                 }
             }
         ))
-        fig.update_layout(title=f"{self.equity} - Overall Sentiment", height=350)
+        fig.update_layout(
+            title=f"{self.equity} - Overall Sentiment",
+            height=200
+        )
         st.plotly_chart(fig, use_container_width=True)
 
-    def render(self):
+    def render(self) -> None:
         """
-        Main method to render the sentiment panel.
+        Fallback: render both feed scores and overall gauge.
         """
         if not self.equity:
             st.warning("No equity selected for sentiment panel.")
             return
         self.simulate_sentiment()
         st.markdown("### Market Sentiment Panel")
-        self.render_bullet_chart()
+        self.render_feed_scores()
         self.render_overall_gauge()

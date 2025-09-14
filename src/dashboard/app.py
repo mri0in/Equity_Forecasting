@@ -28,35 +28,38 @@ def main():
     history_manager = EquityHistory()
     history_manager.add_equity(current_equity)
 
-    # ---- Panels ----
+    # ---- Prepare Shared Data ----
     feed_scores = {}
     overall_sentiment = 0.0
     forecast_prices = []
 
-    # Sentiment Panel
-    sentiment_panel = None
-    sentiment_data = None
-    if panel_option in ["Show Sentiment", "Show Both"]:
-        sentiment_panel = SentimentPanel(current_equity)
-        sentiment_panel.render()
-        feed_scores = sentiment_panel.feed_scores
-        overall_sentiment = sentiment_panel.overall_sentiment
-        sentiment_data = {"overall": overall_sentiment}
+    # ---- Horizontal Layout: 70% | 20% | 10% ----
+    col1, col2, col3 = st.columns([7, 2, 1])
 
-    # Forecast Panel with optional sentiment overlay
-    if panel_option in ["Show Forecast", "Show Both"]:
-        forecast_panel = ForecastPanel(current_equity, forecast_horizon)
-        forecast_panel.render(sentiment_data=sentiment_data)
-        forecast_prices = forecast_panel.forecast_prices
+    # Forecast Panel (70%)
+    with col1:
+        if panel_option in ["Show Forecast", "Show Both"]:
+            forecast_panel = ForecastPanel(current_equity, forecast_horizon)
+            forecast_panel.render()
+            forecast_prices = forecast_panel.forecast_prices
 
-    # Combined Table Panel
-    combined_table = CombinedTable(
-        equity=current_equity,
-        feed_scores=feed_scores,
-        overall_sentiment=overall_sentiment,
-        forecast_prices=forecast_prices
-    )
-    combined_table.render()
+    # Sentiment Panel (20%)
+    with col2:
+        if panel_option in ["Show Sentiment", "Show Both"]:
+            sentiment_panel = SentimentPanel(current_equity)
+            sentiment_panel.render()
+            feed_scores = sentiment_panel.feed_scores
+            overall_sentiment = sentiment_panel.overall_sentiment
+
+    # Combined Table (10%)
+    with col3:
+        combined_table = CombinedTable(
+            equity=current_equity,
+            feed_scores=feed_scores,
+            overall_sentiment=overall_sentiment,
+            forecast_prices=forecast_prices
+        )
+        combined_table.render()
 
     # ---- Footer / Info ----
     st.sidebar.markdown("---")

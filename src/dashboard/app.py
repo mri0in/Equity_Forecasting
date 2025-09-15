@@ -10,78 +10,64 @@ from src.dashboard.utils import get_ui_logger
 
 logger = get_ui_logger("app")
 
+
 def main():
     st.set_page_config(page_title="Equity Forecasting Dashboard", layout="wide")
-    st.title("Equity Forecasting Dashboard")
+    st.markdown("<h2 style='text-align:center'>Equity Forecasting Dashboard</h2>", unsafe_allow_html=True)
 
-    # Sidebar
+    # ---- Sidebar ----
     current_equity, forecast_horizon, panel_option = render_sidebar()
-    logger.info(f"Sidebar selections - Equity: {current_equity}, Horizon: {forecast_horizon}, Panel: {panel_option}")
+    logger.info(
+        f"Sidebar selections - Equity: {current_equity}, Horizon: {forecast_horizon}, Panel: {panel_option}"
+    )
 
-    # Persist history
+    # ---- Equity History ----
     history_manager = EquityHistory()
-    if current_equity:
-        history_manager.add_equity(current_equity)
+    history_manager.add_equity(current_equity)
 
-    # Prepare objects
-    sentiment_panel = SentimentPanel(current_equity)
-    forecast_panel = ForecastPanel(current_equity, forecast_horizon)
+    # ---- Panels ----
+    feed_scores = {}
+    overall_sentiment = 0.0
+    forecast_prices = []
 
-    # Simulate sentiment early if we will need it (overlay or middle column)
-    need_sentiment = panel_option in ["Show Sentiment", "Show Both", "Show Forecast"]
-    if need_sentiment:
-        sentiment_panel.simulate_sentiment()
-        sentiment_data = {"overall": sentiment_panel.overall_sentiment}
-    else:
-        sentiment_data = None
-
-    # Horizontal layout: 70 | 20 | 10
-    col1, col2, col3 = st.columns([7, 2, 1])
-
-    # ----- LEFT: Forecast (70%) -----
-    with col1:
+    # --- Row 1: Forecast Panel (70%) ---
+    with st.container():
+        st.markdown("<h4>Forecast Panel</h4>", unsafe_allow_html=True)
         if panel_option in ["Show Forecast", "Show Both"]:
-            # pass sentiment_data to overlay the overall gauge on the forecast chart
-            forecast_panel.render(sentiment_data=sentiment_data)
-        else:
-            st.info("Forecast hidden (choose 'Show Forecast' or 'Show Both')")
+            forecast_panel = ForecastPanel(current_equity, forecast_horizon)
+            forecast_panel.render()
+            forecast_prices = forecast_panel.forecast_prices
 
-    # ----- MIDDLE: Sentiment (20%) with vertical 70:30 via heights -----
-    with col2:
-        st.markdown("### Market Sentiment")
-        if panel_option in ["Show Sentiment", "Show Both", "Show Forecast"]:
-            # enforce pixel heights that approximate 70:30 within this column
-            total_pixels = 600  # adjust if you want the vertical size larger/smaller
-            top_height = int(total_pixels * 0.70)   # feed-scores area
-            bottom_height = int(total_pixels * 0.30)  # overall gauge
+    st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)  # spacing
 
-            # Feed-wise (top ~70%)
-            sentiment_panel.render_feed_scores(height=top_height)
+    # --- Row 2: Market Sentiment Panel (20%) ---
+    with st.container():
+        st.markdown("<h4>Market Sentiment Panel</h4>", unsafe_allow_html=True)
+        if panel_option in ["Show Sentiment", "Show Both"]:
+            sentiment_panel = SentimentPanel(current_equity)
+            sentiment_panel.render()  # internally handles 70:30 vertical split
+            feed_scores = sentiment_panel.feed_scores
+            overall_sentiment = sentiment_panel.overall_sentiment
 
-            # Overall (bottom ~30%)
-            sentiment_panel.render_overall_gauge(height=bottom_height)
-        else:
-            st.info("Sentiment hidden (choose 'Show Sentiment' or 'Show Both')")
+    
+    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)  # spacing
 
-    # ----- RIGHT: Combined Table (10%) -----
-    with col3:
-        st.markdown("### Combined Output")
-        # feed_scores and overall_sentiment come from simulated sentiment if available
-        feed_scores = sentiment_panel.feed_scores if need_sentiment else {}
-        overall_sentiment = sentiment_panel.overall_sentiment if need_sentiment else 0.0
-
+    # --- Row 3: Combined Output Table (10%) ---
+    with st.container():
+        st.markdown("<h4>Combined Output Table</h4>", unsafe_allow_html=True)
         combined_table = CombinedTable(
             equity=current_equity,
             feed_scores=feed_scores,
             overall_sentiment=overall_sentiment,
-            forecast_prices=forecast_panel.forecast_prices or []
+            forecast_prices=forecast_prices,
         )
         combined_table.render()
 
-    # Sidebar footer
+    # ---- Footer ----
     st.sidebar.markdown("---")
     st.sidebar.info("Equity history saved. Use 'Clear History' in the sidebar to reset.")
     logger.info("Dashboard render complete.")
+
 
 if __name__ == "__main__":
     main()

@@ -9,7 +9,7 @@ import logging
 # Logging configuration
 # -------------------------------
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.get_ui_logger(__name__)
 
 # -------------------------------
 # Combined Table Panel Class
@@ -46,7 +46,6 @@ class CombinedTable:
         }
 
         df = pd.DataFrame(data)
-        st.markdown("### Combined Sentiment & Forecast Table")
         st.dataframe(df)
 
         logger.info(f"Rendered combined table for {self.equity}")

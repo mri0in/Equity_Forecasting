@@ -11,7 +11,7 @@ import logging
 # Logging configuration
 # -------------------------------
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.get_ui_logger(__name__)
 
 # -------------------------------
 # Sentiment Panel Class
@@ -97,42 +97,47 @@ class SentimentPanel:
 
     def render_overall_gauge(self, container: Optional[DeltaGenerator] = None) -> None:
         """
-        Render overall sentiment as a circular gauge with needle.
+        Render overall sentiment as a circular ring gauge with needle using Plotly Indicator.
 
         Args:
             container: Optional Streamlit container (DeltaGenerator) to render into.
         """
-        if self.overall_sentiment == 0 and not self.feed_scores:
+        if not self.feed_scores and self.overall_sentiment == 0:
             st.warning("No overall sentiment available.")
             return
 
-        fig = go.Figure(
-            go.Indicator(
-                mode="gauge+number",
-                value=self.overall_sentiment,
-                gauge={
-                    "axis": {"range": [-1, 1]},
-                    "bar": {"color": "darkblue"},
-                    "steps": [
-                        {"range": [-1, -0.3], "color": "red"},
-                        {"range": [-0.3, 0.3], "color": "gray"},
-                        {"range": [0.3, 1], "color": "green"},
-                    ],
-                    "threshold": {
-                        "line": {"color": "black", "width": 4},
-                        "thickness": 0.75,
-                        "value": self.overall_sentiment,
-                    },
-                },
-            )
-        )
+        # Map sentiment [-1, 1] → [0, 1] for gauge
+        gauge_value = (self.overall_sentiment + 1) / 2  # -1 → 0, 0 → 0.5, +1 → 1
+
+        fig = go.Figure(go.Indicator(
+            mode="gauge+number+delta",
+            value=gauge_value,
+            number={'suffix': '', 'valueformat': '.2f'},
+            delta={'reference': 0.5, 'increasing': {'color': "green"}, 'decreasing': {'color': "red"}},
+            title={'text': f"{self.equity} - Overall Sentiment"},
+            gauge={
+                'axis': {'range': [0, 1], 'tickvals': [0, 0.25, 0.5, 0.75, 1],
+                        'ticktext': ['-1', '-0.5', '0', '0.5', '1']},
+                'bar': {'color': "black", 'thickness': 0.05},
+                'steps': [
+                    {'range': [0, 0.35], 'color': "red"},
+                    {'range': [0.35, 0.65], 'color': "gray"},
+                    {'range': [0.65, 1], 'color': "green"},
+                ],
+                'threshold': {
+                    'line': {'color': "black", 'width': 4},
+                    'thickness': 0.8,
+                    'value': gauge_value
+                }
+            }
+        ))
+
         fig.update_layout(
-            title=f"{self.equity} - Overall Sentiment",
             height=350,
-            margin=dict(l=40, r=40, t=40, b=40),
+            margin=dict(l=40, r=40, t=50, b=40),
         )
 
-        if container is not None:
+        if container:
             container.plotly_chart(fig, use_container_width=True)
         else:
             st.plotly_chart(fig, use_container_width=True)
@@ -153,10 +158,10 @@ class SentimentPanel:
         # Simulate or fetch sentiment
         self.simulate_sentiment()
 
-        st.markdown("### Market Sentiment Panel")
+        #st.markdown("### Market Sentiment Panel")
 
-        # Split into 2 columns (70:30)
-        col_a, col_b = st.columns([7, 3])
+        # Split into 2 columns (60:40)
+        col_a, col_b = st.columns([6, 4])
 
         # Call rendering methods into specific sub-columns
         with col_a:

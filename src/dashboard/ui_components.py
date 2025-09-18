@@ -9,7 +9,7 @@ import logging
 # Logging configuration
 # -------------------------------
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.get_ui_logger(__name__)
 
 # -------------------------------
 # Sidebar UI Components Class
@@ -67,13 +67,16 @@ class SidebarUI:
             logger.info("Cleared equity history")
             st.experimental_rerun()  # Refresh sidebar to update dropdown
 
-        # ---- Forecast Horizon Slider ----
-        self.forecast_horizon = st.sidebar.slider(
+        # ---- Forecast Horizon Weekly Steps ----
+        forecast_options = [1, 7, 14, 21, 30]
+
+        self.forecast_horizon = st.sidebar.select_slider(
             "Forecast Horizon (days)",
-            min_value=1,
-            max_value=30,
-            value=1
+            options=forecast_options,
+            value=1,
+            format_func=lambda x: f"{x} "
         )
+
 
         # ---- Panel Control Buttons ----
         self.panel_option = st.sidebar.radio(

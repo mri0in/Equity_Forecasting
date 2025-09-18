@@ -13,7 +13,12 @@ logger = get_ui_logger("app")
 
 def main():
     st.set_page_config(page_title="Equity Forecasting Dashboard", layout="wide")
-    st.markdown("<h2 style='text-align:center'>Equity Forecasting Dashboard</h2>", unsafe_allow_html=True)
+
+    # Title
+    st.markdown(
+        "<h2 style='text-align:center; margin-bottom:20px;'>Equity Forecasting Dashboard</h2>",
+        unsafe_allow_html=True,
+    )
 
     # ---- Sidebar ----
     current_equity, forecast_horizon, panel_option = render_sidebar()
@@ -32,29 +37,56 @@ def main():
 
     # --- Row 1: Forecast Panel (70%) ---
     with st.container():
-        st.markdown("<h4>Forecast Panel</h4>", unsafe_allow_html=True)
+        st.markdown(
+            "<h4 style='border-bottom:1px solid #ccc; padding-bottom:5px;'>Forecast Panel</h4>",
+            unsafe_allow_html=True,
+        )
+
         if panel_option in ["Show Forecast", "Show Both"]:
             forecast_panel = ForecastPanel(current_equity, forecast_horizon)
             forecast_panel.render()
-            forecast_prices = forecast_panel.forecast_prices
+            # Use get_forecast() instead of accessing attribute directly
+            forecast_prices = forecast_panel.get_forecast()
 
     st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)  # spacing
 
     # --- Row 2: Market Sentiment Panel (20%) ---
     with st.container():
-        st.markdown("<h4>Market Sentiment Panel</h4>", unsafe_allow_html=True)
-        if panel_option in ["Show Sentiment", "Show Both"]:
-            sentiment_panel = SentimentPanel(current_equity)
-            sentiment_panel.render()  # internally handles 70:30 vertical split
-            feed_scores = sentiment_panel.feed_scores
-            overall_sentiment = sentiment_panel.overall_sentiment
+        st.markdown(
+            "<h4 style='border-bottom:1px solid #ccc; padding-bottom:5px;'>Market Sentiment Panel</h4>",
+            unsafe_allow_html=True,
+        )
 
-    
-    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)  # spacing
+    if panel_option in ["Show Sentiment", "Show Both"]:
+        # Custom CSS for vertical separation between sentiment panel columns
+        st.markdown(
+            """
+            <style>
+            div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:first-child {
+                border-right: 2px solid #ccc;
+                padding-right: 15px;
+            }
+            div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:last-child {
+                padding-left: 15px;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        sentiment_panel = SentimentPanel(current_equity)
+        sentiment_panel.render()  # internally handles 70:30 vertical split
+        feed_scores = sentiment_panel.feed_scores
+        overall_sentiment = sentiment_panel.overall_sentiment
+
+    st.markdown("<div style='height:15px'></div>", unsafe_allow_html=True)  # spacing
 
     # --- Row 3: Combined Output Table (10%) ---
     with st.container():
-        st.markdown("<h4>Combined Output Table</h4>", unsafe_allow_html=True)
+        st.markdown(
+            "<h4 style='border-bottom:1px solid #ccc; padding-bottom:5px;'>Combined Output Table</h4>",
+            unsafe_allow_html=True,
+        )
         combined_table = CombinedTable(
             equity=current_equity,
             feed_scores=feed_scores,

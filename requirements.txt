@@ -25,3 +25,4 @@ graphviz                                    #Graph visualization
 ipywidgets                                  #Interactive widgets
 IPython                                     #Jupyter notebook
 streamlit                                   #Dashboard 
+

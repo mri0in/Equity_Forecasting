@@ -7,9 +7,9 @@ import requests
 from .base_feed import BaseFeed
 from ..feed_schemas.news_item import NewsItem
 from src.features.market_sentiment.active_equity.active_equity import ActiveEquity
-from src.utils import setup_logger
+from src.utils.logger import get_logger
 
-logger = setup_logger("SocialFeed")
+logger = get_logger("SocialFeed")
 
 
 class SocialFeed(BaseFeed):

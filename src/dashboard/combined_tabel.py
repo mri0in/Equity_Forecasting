@@ -3,13 +3,12 @@
 import streamlit as st
 import pandas as pd
 from typing import Dict, Optional
-import logging
+from src.dashboard.utils import get_ui_logger
 
 # -------------------------------
 # Logging configuration
 # -------------------------------
-logging.basicConfig(level=logging.INFO)
-logger = logging.get_ui_logger(__name__)
+logger = get_ui_logger(__name__)
 
 # -------------------------------
 # Combined Table Panel Class

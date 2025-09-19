@@ -2,9 +2,9 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
-from src.utils import setup_logger
+from src.utils.logger import get_logger
 
-logger = setup_logger("feed_schemas")
+logger = get_logger("feed_schemas")
 
 @dataclass
 class NewsItem:

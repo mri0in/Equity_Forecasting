@@ -5,9 +5,9 @@ from datetime import datetime
 import feedparser
 from src.features.market_sentiment.feeds.base_feed import BaseFeed
 from src.features.market_sentiment.feed_schemas.news_item import NewsItem
-from src.utils import setup_logger
+from src.utils.logger import get_logger
 
-logger = setup_logger("MarketNewsFeed")
+logger = get_logger("MarketNewsFeed")
 
 
 class MarketNewsFeed(BaseFeed):

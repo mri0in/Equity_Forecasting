@@ -1,9 +1,9 @@
 # src/features/market_sentiment/processing/pre_processor.py
 import re
 from typing import List
-from src.utils import setup_logger
+from src.utils.logger import get_logger
 
-logger = setup_logger("processing")
+logger = get_logger("processing")
 
 # ---------------------------
 # Text Cleaning Steps:

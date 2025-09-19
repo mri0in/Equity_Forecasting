@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import Dict
 
 # Business logic import (training runner handles actual workflow)
-from src.training.train_runner import TrainingRunner
+#from src.training.train_runner import TrainingRunner
 
 # ------------------------------------------------------------
 # Router & Logger Setup
@@ -41,7 +41,7 @@ async def train_model(
     try:
         logger.info(f"Training request received: ticker={ticker}, config={config_path}")
 
-        runner = TrainingRunner(ticker=ticker, config_path=config_path)
+        runner = None # TrainingRunner(ticker=ticker, config_path=config_path)
         job_id = runner.run_training()
 
         logger.info(f"Training started successfully for {ticker} (job_id={job_id})")

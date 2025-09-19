@@ -29,10 +29,10 @@ Directory Context:
 import statistics
 from typing import List, Dict, Any, Optional, Union
 
-from src.utils import setup_logger
+from src.utils.logger import get_logger
 
 # Configure logger
-logger = setup_logger("processing_aggregator")
+logger = get_logger("processing_aggregator")
 
 
 class Aggregator:

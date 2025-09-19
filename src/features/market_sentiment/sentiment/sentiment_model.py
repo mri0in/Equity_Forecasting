@@ -20,11 +20,11 @@ from typing import List, Dict, Union
 
 from textblob import TextBlob  
 
-from src.utils import setup_logger
+from src.utils.logger import get_logger
 from src.features.market_sentiment.nlp_models.hf_model_manager import HFModelManager
 
 # Configure logger
-logger = setup_logger("sentiment_model")
+logger = get_logger("sentiment_model")
 
 
 class SentimentModel:
@@ -74,7 +74,7 @@ class SentimentModel:
             logger.error(f"Failed to load {self.model_name}: {e}. Falling back to {self.fallback_model}.")
             self.model_name = self.fallback_model
             self.pipeline = None
-            
+
     def analyze_text(self, text: str) -> Dict[str, Union[str, float]]:
         """
         Analyze sentiment of a given text.

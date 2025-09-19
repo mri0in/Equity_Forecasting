@@ -3,13 +3,13 @@
 import streamlit as st
 from typing import Optional
 from .history_manager import EquityHistory
-import logging
+from src.dashboard.utils import get_ui_logger
 
 # -------------------------------
 # Logging configuration
 # -------------------------------
-logging.basicConfig(level=logging.INFO)
-logger = logging.get_ui_logger(__name__)
+
+logger = get_ui_logger(__name__)
 
 # -------------------------------
 # Sidebar UI Components Class

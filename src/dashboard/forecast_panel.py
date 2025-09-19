@@ -5,16 +5,15 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from typing import Optional, List
-import logging
+from src.dashboard.utils import get_ui_logger
 
 # Import internal API function for real forecasts
-from src.api.forecasting_api import get_forecast_for_equity  
+#from src.api.forecasting_api import get_forecast_for_equity  
 
 # -------------------------------
 # Logging configuration
 # -------------------------------
-logging.basicConfig(level=logging.INFO)
-logger = logging.get_ui_logger(__name__)
+logger = get_ui_logger(__name__)
 
 # -------------------------------
 # Forecast Panel Class
@@ -50,7 +49,7 @@ class ForecastPanel:
         Fetch real forecast using internal API function.
         """
         try:
-            result = get_forecast_for_equity(self.equity, self.horizon)
+            result = None # get_forecast_for_equity(self.equity, self.horizon)
             # Expecting result to be dict with 'dates', 'hist_prices', 'forecast_prices'
             self.dates = pd.to_datetime(result.get("dates"))
             self.hist_prices = np.array(result.get("hist_prices", []))

@@ -24,10 +24,10 @@ Directory Context:
 import re
 from typing import List
 
-from src.utils import setup_logger
+from src.utils.logger import get_logger
 
 # Configure logger
-logger = setup_logger("processing_extractor")
+logger = get_logger("processing_extractor")
 
 
 class Extractor:

@@ -4,15 +4,14 @@ import streamlit as st
 import plotly.graph_objects as go
 from typing import Dict, Optional
 from streamlit.delta_generator import DeltaGenerator
-import logging
+from src.dashboard.utils import get_ui_logger
 
 from src.features.market_sentiment.sentiment.sentiment_aggregator import SentimentAggregator
 
 # -------------------------------
 # Logging configuration
 # -------------------------------
-logging.basicConfig(level=logging.INFO)
-logger = logging.get_ui_logger(__name__)
+logger = get_ui_logger(__name__)
 
 # -------------------------------
 # Sentiment Panel Class

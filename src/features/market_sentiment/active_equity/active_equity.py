@@ -1,10 +1,10 @@
 # src/features/market_sentiment/active_equity/active_equity.py
 
 from typing import Optional
-from src.utils import setup_logger
+from src.utils.logger import get_logger
 from src.config import active_equity as config_equity  # Single source of truth
 
-logger = setup_logger("active_equity")
+logger = get_logger("active_equity")
 
 
 class ActiveEquity:

@@ -1,14 +1,14 @@
 # src/features/market_sentiment/sentiment/sentiment_aggregator.py
 
 from typing import Dict, Any, List
-from src.utils import setup_logger
+from src.utils.logger import get_logger
 
 from src.features.market_sentiment.feeds.market_news_feed import MarketNewsFeed
 from src.features.market_sentiment.feeds.press_feed import PressFeed
 from src.features.market_sentiment.feeds.social_feed import SocialFeed
 from src.features.market_sentiment.feeds.web_feed import WebFeed
 
-from src.features.market_sentiment.processing.pre_processor import PreProcessor
+from src.features.market_sentiment.processing.pre_processor import TextPreProcessor
 from src.features.market_sentiment.processing.extractor import Extractor
 from src.features.market_sentiment.sentiment.sentiment_model import SentimentModel
 
@@ -31,7 +31,7 @@ Implementation Notes:
       (finance-domain transformer). 
 """
 
-logger = setup_logger("sentiment_aggregator")
+logger = get_logger("sentiment_aggregator")
 
 
 class SentimentAggregator:
@@ -69,7 +69,7 @@ class SentimentAggregator:
         ]
 
         # Processing utilities
-        self.preprocessor = PreProcessor()
+        self.preprocessor = TextPreProcessor()
         self.extractor = Extractor()
 
         # Sentiment model with selected backend (TextBlob/FinBERT implemented now)

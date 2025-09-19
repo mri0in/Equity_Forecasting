@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import Dict
 
 # Business logic imports (predictor handles actual forecasting)
-from src.predictor.forecast_runner import ForecastRunner
+#from src.predictor.forecast_runner import ForecastRunner
 
 # ------------------------------------------------------------
 # Router & Logger Setup
@@ -45,7 +45,7 @@ async def predict_equity(
     try:
         logger.info(f"Forecast request received: ticker={ticker}, horizon={horizon}, simulate={simulate}")
 
-        runner = ForecastRunner(ticker=ticker, horizon=horizon)
+        runner = None #ForecastRunner(ticker=ticker, horizon=horizon)
 
         if simulate:
             forecast = runner.simulate_forecast()

@@ -2,9 +2,9 @@
 import abc
 from typing import List, Any
 
-from src.utils import setup_logger
+from src.utils.logger import get_logger
 
-logger = setup_logger("feeds")
+logger = get_logger("feeds")
 
 
 class BaseFeed(abc.ABC):

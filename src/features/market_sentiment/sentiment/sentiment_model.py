@@ -6,7 +6,7 @@ This module defines the SentimentModel class responsible for analyzing
 text from multiple market feeds and assigning sentiment scores.
 
 Features:
-    - Supports multiple backends: TextBlob, Hugging Face models (FinBERT, etc.).
+    - Supports multiple backends: TextBlob(local,fallback), Hugging Face models (FinBERT, etc.).
     - Produces discrete labels (positive, neutral, negative).
     - Produces continuous score in range [-1, 1].
     - Designed for modular extension (easy model switching).
@@ -18,7 +18,7 @@ Directory Context:
 import logging
 from typing import List, Dict, Union
 
-from textblob import TextBlob  # lightweight sentiment analyzer
+from textblob import TextBlob  
 
 from src.utils import setup_logger
 from src.features.market_sentiment.nlp_models.hf_model_manager import HFModelManager
@@ -32,12 +32,13 @@ class SentimentModel:
     Sentiment analysis model for financial texts.
 
     Backends:
-        - "textblob"  → lightweight, quick polarity scoring.
+        - "textblob"  → lightweight, quick polarity scoring, as fallback for 
+                        testing, offline use.
         - "finbert"   → Hugging Face finance-specific transformer.
         - "hf:<name>" → Any Hugging Face model registered in ModelRegistry.
     """
 
-    def __init__(self, model_name: str = "textblob"):
+    def __init__(self, model_name: str = "finbert"):
         """
         Initialize the sentiment model.
 
@@ -51,22 +52,29 @@ class SentimentModel:
         self.model_name = model_name
         self.hf_manager = HFModelManager()
         self.pipeline = None
+        self.fallback_model = "textblob"
 
-        if self.model_name == "textblob":
-            logger.info("SentimentModel initialized with TextBlob backend.")
+        try:
+            if self.model_name == "textblob":
+                logger.info("SentimentModel initialized with TextBlob backend.")
 
-        elif self.model_name == "finbert":
-            logger.info("Loading FinBERT sentiment model from Hugging Face...")
-            self.pipeline = self.hf_manager.load_pipeline("finbert")
+            elif self.model_name == "finbert":
+                logger.info("Loading FinBERT sentiment model from Hugging Face...")
+                self.pipeline = self.hf_manager.load_pipeline("finbert")
 
-        elif self.model_name.startswith("hf:"):
-            hf_key = self.model_name.split("hf:")[-1]
-            logger.info(f"Loading Hugging Face model from registry: {hf_key}")
-            self.pipeline = self.hf_manager.load_pipeline(hf_key)
+            elif self.model_name.startswith("hf:"):
+                hf_key = self.model_name.split("hf:")[-1]
+                logger.info(f"Loading Hugging Face model from registry: {hf_key}")
+                self.pipeline = self.hf_manager.load_pipeline(hf_key)
 
-        else:
-            raise ValueError(f"Unsupported model backend: {self.model_name}")
+            else:
+                raise ValueError(f"Unsupported model backend: {self.model_name}")
 
+        except Exception as e:
+            logger.error(f"Failed to load {self.model_name}: {e}. Falling back to {self.fallback_model}.")
+            self.model_name = self.fallback_model
+            self.pipeline = None
+            
     def analyze_text(self, text: str) -> Dict[str, Union[str, float]]:
         """
         Analyze sentiment of a given text.

@@ -38,14 +38,14 @@ class ModelRegistry:
                 "description": "FinBERT - BERT-based model fine-tuned for financial sentiment analysis.",
                 "task": "text-classification",
             },
-            "distilbert-sst2": {
-                "hf_id": "distilbert-base-uncased-finetuned-sst-2-english",
-                "description": "DistilBERT sentiment classifier trained on SST-2 dataset.",
-                "task": "text-classification",
-            },
             "roberta-financial-news": {
                 "hf_id": "yiyanghkust/roberta-financial-news-sentiment",
                 "description": "RoBERTa model fine-tuned on financial news sentiment classification.",
+                "task": "text-classification",
+            },
+            "distilbert-sst2": {
+                "hf_id": "distilbert-base-uncased-finetuned-sst-2-english",
+                "description": "DistilBERT sentiment classifier trained on SST-2 dataset.",
                 "task": "text-classification",
             },
         }

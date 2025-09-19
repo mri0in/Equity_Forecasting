@@ -28,8 +28,10 @@ class WebFeed(BaseFeed):
         all_items: List[NewsItem] = []
 
         sources = [
+            (f"https://www.moneycontrol.com/rss/company/{ticker}/press-releases.xml", "MoneyControl"),
             (f"https://www.financialexpress.com/market/{ticker}-rss/", "Financial Express"),
             (f"https://www.livemint.com/rss/{ticker}.xml", "LiveMint")
+            (f"https://news.google.com/rss/search?q={ticker}+stock", "Google News")
         ]
 
         for url, source_name in sources:

@@ -7,6 +7,9 @@ import plotly.graph_objects as go
 from typing import Optional, List
 import logging
 
+# Import internal API function for real forecasts
+from src.api.forecasting_api import get_forecast_for_equity  
+
 # -------------------------------
 # Logging configuration
 # -------------------------------
@@ -41,6 +44,22 @@ class ForecastPanel:
         self.forecast_prices = forecast.tolist()
 
         logger.info(f"Simulated forecast for {self.equity}, horizon {self.horizon}")
+
+    def fetch_real_forecast(self) -> None:
+        """
+        Fetch real forecast using internal API function.
+        """
+        try:
+            result = get_forecast_for_equity(self.equity, self.horizon)
+            # Expecting result to be dict with 'dates', 'hist_prices', 'forecast_prices'
+            self.dates = pd.to_datetime(result.get("dates"))
+            self.hist_prices = np.array(result.get("hist_prices", []))
+            self.forecast_prices = list(result.get("forecast_prices", []))
+            logger.info(f"Real forecast fetched for {self.equity}, horizon {self.horizon}")
+        except Exception as e:
+            logger.error(f"Failed to fetch real forecast for {self.equity}: {e}")
+            # fallback to simulation
+            self.simulate_forecast()
 
     def render_chart(self) -> None:
         """
@@ -81,15 +100,20 @@ class ForecastPanel:
 
         st.plotly_chart(fig, use_container_width=True)
 
-    def render(self) -> None:
+    def render_forecast(self, use_simulation: bool = False) -> None:
         """
         Main method to render forecast panel.
+        If use_simulation=True, fallback/demo mode is used.
         """
         if not self.equity:
             st.warning("No equity selected for forecast panel.")
             return
 
-        self.simulate_forecast()
+        if use_simulation:
+            self.simulate_forecast()
+        else:
+            self.fetch_real_forecast()
+
         self.render_chart()
 
     def get_forecast(self) -> List[float]:

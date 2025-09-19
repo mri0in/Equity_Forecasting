@@ -28,17 +28,23 @@ class PressFeed(BaseFeed):
         all_items: List[NewsItem] = []
 
         sources = [
-            (f"https://www.moneycontrol.com/rss/company/{ticker}/press-releases.xml", "MoneyControl"),
-            (f"https://www.bseindia.com/xml-data/corp/{ticker}.xml", "BSE India")
-        ]
+            
+            (f"https://www.bseindia.com/xml-data/corp/{ticker}.xml", "BSE India"),
+            (f"https://www.nseindia.com/rss/company/{ticker}/press-releases.xml", "NSE India")
+            (f"https://www.nasdaq.com/market-activity/stocks/{ticker}/press-releases", "Nasdaq"),
+            (f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={ticker}&type=8-K&dateb=&owner=exclude&count=40&output=atom", "SEC.gov"),
+            (f"https://www.nyse.com/quote/XNYS:{ticker}/press-releases", "NYSE  ")
+            
+            ]   
 
         for url, source_name in sources:
             try:
                 feed = feedparser.parse(url)
-                for entry in feed.entries[:10]:
+                for entry in feed.entries[:20]:
                     published = (
                         datetime(*entry.published_parsed[:6])
-                        if hasattr(entry, "published_parsed") else datetime.utcnow()
+                        if hasattr(entry, "published_parsed") 
+                        else datetime.now()
                     )
                     all_items.append(
                         NewsItem(

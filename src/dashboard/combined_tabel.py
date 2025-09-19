@@ -27,7 +27,7 @@ class CombinedTable:
         self.overall_sentiment = overall_sentiment if overall_sentiment is not None else 0.0
         self.forecast_prices = forecast_prices if forecast_prices else []
 
-    def render(self):
+    def render_combined_table(self):
         """
         Render the combined table in Streamlit
         """

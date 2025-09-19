@@ -6,6 +6,8 @@ from src.dashboard.sentiment_panel import SentimentPanel
 from src.dashboard.forecast_panel import ForecastPanel
 from src.dashboard.combined_tabel import CombinedTable
 from src.dashboard.history_manager import EquityHistory
+from src.config.active_equity import set_active_equity
+
 from src.dashboard.utils import get_ui_logger
 
 logger = get_ui_logger("app")
@@ -26,6 +28,9 @@ def main():
         f"Sidebar selections - Equity: {current_equity}, Horizon: {forecast_horizon}, Panel: {panel_option}"
     )
 
+    # Update global active equity (single source of truth)
+    set_active_equity(current_equity) 
+
     # ---- Equity History ----
     history_manager = EquityHistory()
     history_manager.add_equity(current_equity)
@@ -44,7 +49,7 @@ def main():
 
         if panel_option in ["Show Forecast", "Show Both"]:
             forecast_panel = ForecastPanel(current_equity, forecast_horizon)
-            forecast_panel.render()
+            forecast_panel.render_forecast()
             # Use get_forecast() instead of accessing attribute directly
             forecast_prices = forecast_panel.get_forecast()
 
@@ -75,7 +80,7 @@ def main():
         )
 
         sentiment_panel = SentimentPanel(current_equity)
-        sentiment_panel.render()  # internally handles 70:30 vertical split
+        sentiment_panel.render_sentiment(use_real_data=True)  
         feed_scores = sentiment_panel.feed_scores
         overall_sentiment = sentiment_panel.overall_sentiment
 
@@ -93,7 +98,7 @@ def main():
             overall_sentiment=overall_sentiment,
             forecast_prices=forecast_prices,
         )
-        combined_table.render()
+        combined_table.render_combined_table()
 
     # ---- Footer ----
     st.sidebar.markdown("---")

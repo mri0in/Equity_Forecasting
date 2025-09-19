@@ -3,7 +3,7 @@
 from typing import Dict, Any, List
 from src.utils import setup_logger
 
-from src.features.market_sentiment.feeds.news_feed import NewsFeed
+from src.features.market_sentiment.feeds.market_news_feed import MarketNewsFeed
 from src.features.market_sentiment.feeds.press_feed import PressFeed
 from src.features.market_sentiment.feeds.social_feed import SocialFeed
 from src.features.market_sentiment.feeds.web_feed import WebFeed
@@ -41,19 +41,28 @@ class SentimentAggregator:
     Produces an equity-level sentiment summary.
     """
 
-    def __init__(self, equity: str, model_backend: str = "textblob"):
+    def __init__(self, equity: str, model_backend: str = "finbert"):
         """
         Args:
             equity (str): Active equity ticker or name.
             model_backend (str): Sentiment backend to use: "textblob" or "finbert".
-                                 (Custom ML can be added later behind the same interface.)
+            (Custom ML can be added later behind the same interface.)
         """
         self.equity = equity
+
+        # fallback model
+        self.fallback_model = "textblob"
+
+        # Validate requested backend
+        allowed_models = ["finbert",  "roberta-financial-news", "distilbert-sst2","textblob"]
+        if model_backend not in allowed_models:
+            logger.warning(f"Unknown backend '{model_backend}', falling back to {self.fallback_model}")
+            model_backend = self.fallback_model
         self.model_backend = model_backend
 
         # Initialize feed handlers for this equity
         self.feeds = [
-            NewsFeed(equity),
+            MarketNewsFeed(equity),
             PressFeed(equity),
             SocialFeed(equity),
             WebFeed(equity),
@@ -80,7 +89,7 @@ class SentimentAggregator:
         # Fallback for earlier naming
         return self.preprocessor.clean(text)  # type: ignore[attr-defined]
 
-    def run(self) -> Dict[str, Any]:
+    def SentimentRunner(self) -> Dict[str, Any]:
         """
         Execute the sentiment aggregation pipeline.
 

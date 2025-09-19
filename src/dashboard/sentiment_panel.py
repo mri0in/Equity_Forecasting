@@ -2,10 +2,11 @@
 
 import streamlit as st
 import plotly.graph_objects as go
-from typing import Dict, Optional, Any
+from typing import Dict, Optional
 from streamlit.delta_generator import DeltaGenerator
-import numpy as np
 import logging
+
+from src.features.market_sentiment.sentiment.sentiment_aggregator import SentimentAggregator
 
 # -------------------------------
 # Logging configuration
@@ -27,24 +28,50 @@ class SentimentPanel:
 
     def __init__(self, equity: str):
         self.equity = equity.upper()
-        self.feeds = ["News", "Press", "Social", "Web"]
+        self.feeds = ["Market_News", "Press", "Social", "Web"]
         self.feed_scores: Dict[str, float] = {}
         self.overall_sentiment: float = 0.0
 
     # -------------------------------
-    # Data Simulation (placeholder)
+    # Fetch aggregated sentiment
+    # -------------------------------
+    def fetch_real_sentiment(self) -> None:
+        """
+        Fetch feed-wise sentiment and overall sentiment from SentimentAggregator.
+        """
+        if not self.equity:
+            logger.warning("No equity specified for fetching sentiment")
+            return
+
+
+        try:
+            aggregator = SentimentAggregator(equity=self.equity)
+            result = aggregator.SentimentRunner()
+            self.feed_scores = result.get("feed_scores", {})
+            self.overall_sentiment = result.get("overall_sentiment", 0.0)
+            logger.info(
+                f"Fetched aggregated sentiment for {self.equity}: "
+                f"{self.feed_scores}, overall {self.overall_sentiment}"
+            )
+        except Exception as e:
+            logger.error(f"Fetching aggregated sentiment failed for {self.equity}: {e}")
+            self.simulate_sentiment()
+
+    # -------------------------------
+    # Data Simulation (fallback)
     # -------------------------------
     def simulate_sentiment(self) -> None:
         """
         Simulate sentiment scores for demonstration purposes.
-        Real implementation should fetch from aggregator.
         """
-        np.random.seed(hash(self.equity) % 2**32)  # deterministic per equity
+        import numpy as np
+
+        np.random.seed(hash(self.equity) % 2**32)
         self.feed_scores = {
             feed: np.round(np.random.uniform(-1, 1), 2) for feed in self.feeds
         }
-        self.overall_sentiment = np.round(
-            np.mean(list(self.feed_scores.values())), 2
+        self.overall_sentiment = round(
+            sum(self.feed_scores.values()) / len(self.feed_scores), 2
         )
         logger.info(
             f"Simulated sentiment for {self.equity}: "
@@ -55,13 +82,6 @@ class SentimentPanel:
     # Charts
     # -------------------------------
     def render_bullet_chart(self, container: Optional[DeltaGenerator] = None) -> None:
-        """
-        Render feed-wise sentiment as a horizontal bar (bullet chart).
-
-        Args:
-            container: Optional Streamlit container (DeltaGenerator) to render into.
-                       If None, rendering goes to the main page (st).
-        """
         if not self.feed_scores:
             st.warning("No feed sentiment scores available.")
             return
@@ -89,25 +109,17 @@ class SentimentPanel:
             margin=dict(l=40, r=40, t=40, b=40),
         )
 
-        # Render into provided container or top-level Streamlit
-        if container is not None:
+        if container:
             container.plotly_chart(fig, use_container_width=True)
         else:
             st.plotly_chart(fig, use_container_width=True)
 
     def render_overall_gauge(self, container: Optional[DeltaGenerator] = None) -> None:
-        """
-        Render overall sentiment as a circular ring gauge with needle using Plotly Indicator.
-
-        Args:
-            container: Optional Streamlit container (DeltaGenerator) to render into.
-        """
         if not self.feed_scores and self.overall_sentiment == 0:
             st.warning("No overall sentiment available.")
             return
 
-        # Map sentiment [-1, 1] → [0, 1] for gauge
-        gauge_value = (self.overall_sentiment + 1) / 2  # -1 → 0, 0 → 0.5, +1 → 1
+        gauge_value = (self.overall_sentiment + 1) / 2
 
         fig = go.Figure(go.Indicator(
             mode="gauge+number+delta",
@@ -117,7 +129,7 @@ class SentimentPanel:
             title={'text': f"{self.equity} - Overall Sentiment"},
             gauge={
                 'axis': {'range': [0, 1], 'tickvals': [0, 0.25, 0.5, 0.75, 1],
-                        'ticktext': ['-1', '-0.5', '0', '0.5', '1']},
+                         'ticktext': ['-1', '-0.5', '0', '0.5', '1']},
                 'bar': {'color': "black", 'thickness': 0.05},
                 'steps': [
                     {'range': [0, 0.35], 'color': "red"},
@@ -145,26 +157,23 @@ class SentimentPanel:
     # -------------------------------
     # Layout Renderer
     # -------------------------------
-    def render(self) -> None:
+    def render_sentiment(self, use_real_data: bool = True) -> None:
         """
-        Main method to render the sentiment panel with a left/right split:
-        - Left side (70%): feed-wise bullet chart
-        - Right side (30%): overall gauge
+        Render the sentiment panel.
+        If use_real_data is True, fetch actual sentiment from aggregator.
+        Otherwise, fallback to simulation for demo.
         """
         if not self.equity:
             st.warning("No equity selected for sentiment panel.")
             return
 
-        # Simulate or fetch sentiment
-        self.simulate_sentiment()
+        if use_real_data:
+            self.fetch_real_sentiment()
+        else:
+            self.simulate_sentiment()
 
-        #st.markdown("### Market Sentiment Panel")
-
-        # Split into 2 columns (60:40)
         col_a, col_b = st.columns([6, 4])
-
-        # Call rendering methods into specific sub-columns
         with col_a:
-            self.render_bullet_chart(container=st)  # main area of the sub-column
+            self.render_bullet_chart(container=st)
         with col_b:
             self.render_overall_gauge(container=st)

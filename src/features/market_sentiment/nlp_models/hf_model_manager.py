@@ -18,10 +18,11 @@ System Design Principle:
 import os
 import logging
 from typing import Optional, Dict, Any
-
+from dotenv import load_dotenv
 from transformers import pipeline, Pipeline
 from src.features.market_sentiment.nlp_models.model_registry import ModelRegistry
 
+load_dotenv()  # Load environment variables from .env file
 
 class HFModelManager:
     """

@@ -2,6 +2,7 @@
 
 import logging
 from typing import Optional
+import yfinance
 
 # -------------------------------
 # Logger Function
@@ -35,16 +36,35 @@ def get_ui_logger(name: Optional[str] = "dashboard") -> logging.Logger:
 # -------------------------------
 def validate_equity(equity: str) -> bool:
     """
-    Validate the equity string input.
-    
-    Args:
-        equity (str): Equity ticker symbol
-    
-    Returns:
-        bool: True if valid, False otherwise
-    """
-    return isinstance(equity, str) and len(equity.strip()) > 0
+    Validate if the provided equity ticker is a real, listed stock 
+    (US or India) using yfinance.
 
+    Args:
+        equity (str): Equity ticker symbol (e.g., 'AAPL', 'INFY.NS')
+
+    Returns:
+        bool: True if the ticker is valid and has historical data, False otherwise.
+    """
+    if not isinstance(equity, str) or not equity.strip():
+        return False
+
+    logger = logging.getLogger(__name__)
+    symbol = equity.strip().upper()
+    try:
+        ticker = yfinance.Ticker(symbol)
+        hist = ticker.history(period="1d")
+
+        if hist is not None and not hist.empty:
+            logger.info(f"Equity validation passed for: {symbol}")
+            return True
+        else:
+            logger.warning(f"Equity validation failed, no data for: {symbol}")
+            return False
+
+    except Exception as e:
+        logger.error(f"Error validating equity {symbol}: {e}")
+        return False
+    
 def normalize_score(score: float, min_val: float = -1.0, max_val: float = 1.0) -> float:
     """
     Clip or normalize a sentiment score to be within bounds.

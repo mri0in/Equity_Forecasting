@@ -2,7 +2,8 @@
 
 import streamlit as st
 from typing import Optional
-from .history_manager import EquityHistory
+from src.dashboard.history_manager import EquityHistory
+from src.dashboard.utils import validate_equity
 from src.dashboard.utils import get_ui_logger
 
 # -------------------------------
@@ -26,7 +27,7 @@ class SidebarUI:
     - Panel selection buttons
     """
 
-    def __init__(self, history_file: str = "src/dashboard/data/equity_history.json"):
+    def __init__(self, history_file: str = "src/datalake/data/raw/equity_history.json"):
         self.history = EquityHistory(history_file)
         self.current_equity: Optional[str] = None
         self.forecast_horizon: int = 7
@@ -44,9 +45,16 @@ class SidebarUI:
             placeholder="Select an Equity"
         )
 
+        valid_custom_equity = None
         if custom_equity:
-            self.history.add_equity(custom_equity.upper())
-            logger.info(f"Added custom equity: {custom_equity.upper()}")
+            symbol = custom_equity.upper()
+            if validate_equity(symbol):  # validating the equity first
+                self.history.add_equity(symbol)
+                valid_custom_equity = symbol
+                logger.info(f"Added custom equity: {symbol}")
+            else:
+                logger.warning(f"Invalid equity symbol entered: {symbol}")
+                st.error(f"⚠️ '{symbol}' is incorrect or not listed.")
 
         # ---- Historical Equities Dropdown ----
         equity_options = self.history.get_history()
@@ -58,8 +66,15 @@ class SidebarUI:
                 index=0
             )
 
-        # Determine current equity
-        self.current_equity = selected_equity if selected_equity else custom_equity
+        # Determine current equity with validation
+        equity_to_set = selected_equity or valid_custom_equity
+        if equity_to_set:
+            self.current_equity = equity_to_set.upper()
+            logger.info(f"Current equity set to: {self.current_equity}")
+        else:
+            self.current_equity = None
+            logger.warning("No valid equity selected.")
+            st.warning("No valid equity selected.")
 
         # ---- Clear History Button ----
         if st.sidebar.button("Clear History"):
@@ -76,7 +91,6 @@ class SidebarUI:
             value=1,
             format_func=lambda x: f"{x} "
         )
-
 
         # ---- Panel Control Buttons ----
         self.panel_option = st.sidebar.radio(

@@ -19,7 +19,7 @@ def set_active_equity(ticker: str) -> None:
         ticker (str): Equity ticker symbol (e.g., RELIANCE, AAPL)
     """
     global ACTIVE_EQUITY
-    ACTIVE_EQUITY = ticker.upper()
+    ACTIVE_EQUITY = ticker
 
 
 def get_active_equity() -> str:

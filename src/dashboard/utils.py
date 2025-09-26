@@ -2,7 +2,7 @@
 
 import logging
 from typing import Optional
-import yfinance
+import yfinance as yf
 
 # -------------------------------
 # Logger Function
@@ -50,21 +50,31 @@ def validate_equity(equity: str) -> bool:
 
     logger = logging.getLogger(__name__)
     symbol = equity.strip().upper()
-    try:
-        ticker = yfinance.Ticker(symbol)
-        hist = ticker.history(period="1d")
 
-        if hist is not None and not hist.empty:
-            logger.info(f"Equity validation passed for: {symbol}")
-            return True
-        else:
-            logger.warning(f"Equity validation failed, no data for: {symbol}")
-            return False
+    # Candidate tickers in priority: US, NSE, BSE
+    candidates = [symbol]
 
-    except Exception as e:
-        logger.error(f"Error validating equity {symbol}: {e}")
-        return False
-    
+    # Add NSE and BSE variants if not already suffixed
+    if not symbol.endswith(".NS"):
+        candidates.append(f"{symbol}.NS")
+    if not symbol.endswith(".BO"):
+        candidates.append(f"{symbol}.BO")
+
+    for candidate in candidates:
+        try:
+            ticker = yf.Ticker(candidate)
+            hist = ticker.history(period="1d")
+            if hist is not None and not hist.empty:
+                logger.info(f"Equity validation passed for: {candidate}")
+                return True
+            else:
+                logger.warning(f"No historical data found for: {candidate}")
+        except Exception as e:
+            logger.error(f"Error validating equity {candidate}: {e}")
+
+    logger.warning(f"Equity validation failed for all candidates: {candidates}")
+    return False
+
 def normalize_score(score: float, min_val: float = -1.0, max_val: float = 1.0) -> float:
     """
     Clip or normalize a sentiment score to be within bounds.

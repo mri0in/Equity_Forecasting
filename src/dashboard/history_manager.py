@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List
 
 class EquityHistory:
-    def __init__(self, filepath: str = "equity_history.json"):
+    def __init__(self, filepath: str = "datalake/data/raw/equity_history.json"):
         """
         Initialize the equity history manager.
         Loads existing history from JSON file if it exists.
@@ -42,6 +42,6 @@ class EquityHistory:
             self._save_history()
 
     def clear_history(self) -> None:
-        """Clear the historical equities list."""
-        self.history = []
-        self._save_history()
+        """Clear the equity history both in memory and file."""
+        with open(self.filepath, "w") as f:
+            json.dump([], f, indent=4)

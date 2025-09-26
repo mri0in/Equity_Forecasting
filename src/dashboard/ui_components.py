@@ -1,117 +1,130 @@
 # src/dashboard/ui_components.py
 
-import streamlit as st
+import logging
 from typing import Optional
+import streamlit as st
 from src.dashboard.history_manager import EquityHistory
-from src.dashboard.utils import validate_equity
 from src.dashboard.utils import get_ui_logger
 
-# -------------------------------
+# ==========================================================
 # Logging configuration
-# -------------------------------
-
+# ==========================================================
 logger = get_ui_logger(__name__)
 
-# -------------------------------
+# ==========================================================
 # Sidebar UI Components Class
-# -------------------------------
+# ==========================================================
 class SidebarUI:
     """
     Handles the Streamlit sidebar UI components for the Equity Dashboard.
-    
+
     Features:
-    - Custom equity input
-    - Historical equity dropdown
+    - Single custom equity input
+    - Historical equity dropdown feeding into custom input
     - Clear history button
     - Forecast horizon slider
     - Panel selection buttons
     """
 
-    def __init__(self, history_file: str = "src/datalake/data/raw/equity_history.json"):
+    def __init__(self, history_file: str = "datalake/data/raw/equity_history.json"):
         self.history = EquityHistory(history_file)
         self.current_equity: Optional[str] = None
-        self.forecast_horizon: int = 7
+        self.forecast_horizon: int = 1
         self.panel_option: str = "Show Both"
 
-    def render(self):
+    # ==========================================================
+    # Render sidebar components
+    # ==========================================================
+    def render(self) -> tuple[Optional[str], int, str]:
         """
-        Render the sidebar components and update current equity, horizon, and panel selection.
+        Render the sidebar and return current selections.
+
+        Returns:
+            tuple: (current_equity, forecast_horizon, panel_option)
         """
         st.sidebar.title("Equity Dashboard Controls")
 
-        # ---- Custom Equity Input ----
+        # ==========================================================
+        # Single Custom Equity Input
+        # ==========================================================
         custom_equity = st.sidebar.text_input(
             "Select an Equity",
-            placeholder="Select an Equity"
+            placeholder="Select an Equity",
+            key="custom_equity_input"
         )
 
-        valid_custom_equity = None
-        if custom_equity:
-            symbol = custom_equity.upper()
-            if validate_equity(symbol):  # validating the equity first
-                self.history.add_equity(symbol)
-                valid_custom_equity = symbol
-                logger.info(f"Added custom equity: {symbol}")
-            else:
-                logger.warning(f"Invalid equity symbol entered: {symbol}")
-                st.error(f"⚠️ '{symbol}' is incorrect or not listed.")
-
-        # ---- Historical Equities Dropdown ----
+        # ==========================================================
+        # Historical Equities Dropdown (feeds into custom input)
+        # ==========================================================
         equity_options = self.history.get_history()
-        selected_equity = None
+        
         if equity_options:
-            selected_equity = st.sidebar.selectbox(
+            selected_from_history = st.sidebar.selectbox(
                 "Or choose from history",
-                options=equity_options,
-                index=0
+                options=["-- Select an equity --"] + equity_options,
+                key="history_dropdown"
             )
+            if selected_from_history != "-- Select an equity --":
+                custom_equity = selected_from_history
+                st.session_state.custom_equity_input = selected_from_history
+                logger.info(f"Equity selected from history: {custom_equity}")
 
-        # Determine current equity with validation
-        equity_to_set = selected_equity or valid_custom_equity
-        if equity_to_set:
-            self.current_equity = equity_to_set.upper()
-            logger.info(f"Current equity set to: {self.current_equity}")
-        else:
-            self.current_equity = None
-            logger.warning("No valid equity selected.")
-            st.warning("No valid equity selected.")
+        # ==========================================================
+        # Set current equity
+        # ==========================================================
+        self.current_equity = custom_equity.strip() or None
+        logger.info(f"Equity input collected: {self.current_equity}")
 
-        # ---- Clear History Button ----
+        # ==========================================================
+        # Clear History Button
+        # ==========================================================
         if st.sidebar.button("Clear History"):
             self.history.clear_history()
             logger.info("Cleared equity history")
-            st.experimental_rerun()  # Refresh sidebar to update dropdown
+            # Modern Streamlit rerun approach
+            st.experimental_set_query_params(clear="1")
+            st.experimental_rerun()
 
-        # ---- Forecast Horizon Weekly Steps ----
+        # ==========================================================
+        # Forecast Horizon
+        # ==========================================================
         forecast_options = [1, 7, 14, 21, 30]
-
         self.forecast_horizon = st.sidebar.select_slider(
             "Forecast Horizon (days)",
             options=forecast_options,
-            value=1,
+            value=self.forecast_horizon,
             format_func=lambda x: f"{x} "
         )
+        logger.info(f"Forecast horizon selected: {self.forecast_horizon}")
 
-        # ---- Panel Control Buttons ----
+        # ==========================================================
+        # Panel Control
+        # ==========================================================
         self.panel_option = st.sidebar.radio(
             "Choose Panel",
             options=["Show Sentiment", "Show Forecast", "Show Both"]
         )
+        logger.info(f"Panel option selected: {self.panel_option}")
 
-        # ---- Display current settings ----
-        st.sidebar.markdown(f"**Current Equity:** {self.current_equity}")
+        # ==========================================================
+        # Display current settings
+        # ==========================================================
+        st.sidebar.markdown(f"**Current Equity (raw):** {self.current_equity}")
         st.sidebar.markdown(f"**Forecast Horizon:** {self.forecast_horizon} days")
         st.sidebar.markdown(f"**Panel Option:** {self.panel_option}")
 
         return self.current_equity, self.forecast_horizon, self.panel_option
 
 
-# -------------------------------
+# ==========================================================
 # Function to initialize and render sidebar
-# -------------------------------
-def render_sidebar():
+# ==========================================================
+def render_sidebar() -> tuple[Optional[str], int, str]:
     """
     Helper function to render the sidebar and return current selections.
+
+    Returns:
+        tuple: (current_equity, forecast_horizon, panel_option)
     """
     sidebar = SidebarUI()
     return sidebar.render()

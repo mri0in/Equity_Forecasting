@@ -6,8 +6,7 @@ from src.dashboard.sentiment_panel import SentimentPanel
 from src.dashboard.forecast_panel import ForecastPanel
 from src.dashboard.combined_tabel import CombinedTable
 from src.dashboard.history_manager import EquityHistory
-from src.config.active_equity import set_active_equity
-
+from src.config.active_equity import set_active_equity, get_active_equity
 from src.dashboard.utils import get_ui_logger
 
 logger = get_ui_logger("app")
@@ -16,54 +15,73 @@ logger = get_ui_logger("app")
 def main():
     st.set_page_config(page_title="Equity Forecasting Dashboard", layout="wide")
 
+    # -------------------------------
     # Title
+    # -------------------------------
     st.markdown(
         "<h2 style='text-align:center; margin-bottom:20px;'>Equity Forecasting Dashboard</h2>",
         unsafe_allow_html=True,
     )
 
-    # ---- Sidebar ----
+    # ==========================================================
+    # Step 1 - Collect raw sidebar inputs
+    # This returns possibly invalid equity from ui_components.py
+    # ==========================================================
     current_equity, forecast_horizon, panel_option = render_sidebar()
     logger.info(
         f"Sidebar selections - Equity: {current_equity}, Horizon: {forecast_horizon}, Panel: {panel_option}"
     )
 
-    # Update global active equity (single source of truth)
-    set_active_equity(current_equity) 
+    # ==========================================================
+    # Step 2 - Validate & set active equity centrally
+    # The actual check happens inside set_active_equity()
+    # ==========================================================
+    # Only attempt to set active equity if user provided or selected something
+    if current_equity:
+        success = set_active_equity(current_equity)
 
-    # ---- Equity History ----
-    history_manager = EquityHistory()
-    history_manager.add_equity(current_equity)
+        if not success:
+            st.warning(f"⚠️ '{current_equity}' is not a valid ticker/symbol name.")
+            current_equity = None
+    else:
+        success = False
 
-    # ---- Panels ----
+    # ==========================================================
+    # Step 3 - Maintain history only if equity is valid
+    # ==========================================================
+    if current_equity:
+        history_manager = EquityHistory()
+        history_manager.add_equity(current_equity)
+
+    # ==========================================================
+    # Step 4 - Panels
+    # ==========================================================
     feed_scores = {}
     overall_sentiment = 0.0
     forecast_prices = []
 
-    # --- Row 1: Forecast Panel (70%) ---
-    with st.container():
-        st.markdown(
-            "<h4 style='border-bottom:1px solid #ccc; padding-bottom:5px;'>Forecast Panel</h4>",
-            unsafe_allow_html=True,
-        )
-
-        if panel_option in ["Show Forecast", "Show Both"]:
+    # --- Forecast Panel ---
+    if current_equity and panel_option in ["Show Forecast", "Show Both"]:
+        with st.container():
+            st.markdown(
+                "<h4 style='border-bottom:1px solid #ccc; padding-bottom:5px;'>Forecast Panel</h4>",
+                unsafe_allow_html=True,
+            )
             forecast_panel = ForecastPanel(current_equity, forecast_horizon)
             forecast_panel.render_forecast()
-            # Use get_forecast() instead of accessing attribute directly
             forecast_prices = forecast_panel.get_forecast()
 
-    st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)  # spacing
+    st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
 
-    # --- Row 2: Market Sentiment Panel (20%) ---
-    with st.container():
-        st.markdown(
-            "<h4 style='border-bottom:1px solid #ccc; padding-bottom:5px;'>Market Sentiment Panel</h4>",
-            unsafe_allow_html=True,
-        )
+    # --- Sentiment Panel ---
+    if current_equity and panel_option in ["Show Sentiment", "Show Both"]:
+        with st.container():
+            st.markdown(
+                "<h4 style='border-bottom:1px solid #ccc; padding-bottom:5px;'>Market Sentiment Panel</h4>",
+                unsafe_allow_html=True,
+            )
 
-    if panel_option in ["Show Sentiment", "Show Both"]:
-        # Custom CSS for vertical separation between sentiment panel columns
+        # Custom CSS for vertical separation
         st.markdown(
             """
             <style>
@@ -80,27 +98,30 @@ def main():
         )
 
         sentiment_panel = SentimentPanel(current_equity)
-        sentiment_panel.render_sentiment(use_real_data=True)  
+        sentiment_panel.render_sentiment(use_real_data=True)
         feed_scores = sentiment_panel.feed_scores
         overall_sentiment = sentiment_panel.overall_sentiment
 
-    st.markdown("<div style='height:15px'></div>", unsafe_allow_html=True)  # spacing
+    st.markdown("<div style='height:15px'></div>", unsafe_allow_html=True)
 
-    # --- Row 3: Combined Output Table (10%) ---
-    with st.container():
-        st.markdown(
-            "<h4 style='border-bottom:1px solid #ccc; padding-bottom:5px;'>Combined Output Table</h4>",
-            unsafe_allow_html=True,
-        )
-        combined_table = CombinedTable(
-            equity=current_equity,
-            feed_scores=feed_scores,
-            overall_sentiment=overall_sentiment,
-            forecast_prices=forecast_prices,
-        )
-        combined_table.render_combined_table()
+    # --- Combined Output Table ---
+    if current_equity:
+        with st.container():
+            st.markdown(
+                "<h4 style='border-bottom:1px solid #ccc; padding-bottom:5px;'>Combined Output Table</h4>",
+                unsafe_allow_html=True,
+            )
+            combined_table = CombinedTable(
+                equity=current_equity,
+                feed_scores=feed_scores,
+                overall_sentiment=overall_sentiment,
+                forecast_prices=forecast_prices,
+            )
+            combined_table.render_combined_table()
 
-    # ---- Footer ----
+    # ==========================================================
+    # Step 5 - Footer
+    # ==========================================================
     st.sidebar.markdown("---")
     st.sidebar.info("Equity history saved. Use 'Clear History' in the sidebar to reset.")
     logger.info("Dashboard render complete.")

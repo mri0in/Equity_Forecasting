@@ -5,7 +5,6 @@ from src.dashboard.ui_components import render_sidebar
 from src.dashboard.sentiment_panel import SentimentPanel
 from src.dashboard.forecast_panel import ForecastPanel
 from src.dashboard.combined_tabel import CombinedTable
-from src.dashboard.history_manager import EquityHistory
 from src.config.active_equity import set_active_equity, get_active_equity
 from src.dashboard.utils import get_ui_logger
 
@@ -46,15 +45,9 @@ def main():
     else:
         success = False
 
+    
     # ==========================================================
-    # Step 3 - Maintain history only if equity is valid
-    # ==========================================================
-    if current_equity:
-        history_manager = EquityHistory()
-        history_manager.add_equity(current_equity)
-
-    # ==========================================================
-    # Step 4 - Panels
+    # Step 3 - Panels
     # ==========================================================
     feed_scores = {}
     overall_sentiment = 0.0
@@ -98,9 +91,15 @@ def main():
         )
 
         sentiment_panel = SentimentPanel(current_equity)
-        sentiment_panel.render_sentiment(use_real_data=True)
+        sim_data_used = sentiment_panel.render_sentiment()
         feed_scores = sentiment_panel.feed_scores
         overall_sentiment = sentiment_panel.overall_sentiment
+
+        if sim_data_used:
+            st.markdown(
+                "<small>'*' is result based on simulated data not real market data.</small>",
+                unsafe_allow_html=True
+            )
 
     st.markdown("<div style='height:15px'></div>", unsafe_allow_html=True)
 
@@ -119,11 +118,7 @@ def main():
             )
             combined_table.render_combined_table()
 
-    # ==========================================================
-    # Step 5 - Footer
-    # ==========================================================
-    st.sidebar.markdown("---")
-    st.sidebar.info("Equity history saved. Use 'Clear History' in the sidebar to reset.")
+    
     logger.info("Dashboard render complete.")
 
 

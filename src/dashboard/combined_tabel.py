@@ -36,7 +36,7 @@ class CombinedTable:
 
         data = {
             "Equity": [self.equity],
-            "News": [self.feed_scores.get("News", 0.0)],
+            "Market_News": [self.feed_scores.get("Market_News", 0.0)],
             "Press": [self.feed_scores.get("Press", 0.0)],
             "Social": [self.feed_scores.get("Social", 0.0)],
             "Web": [self.feed_scores.get("Web", 0.0)],

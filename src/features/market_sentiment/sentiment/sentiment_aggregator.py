@@ -62,7 +62,7 @@ class SentimentAggregator:
 
         # Initialize feed handlers for this equity
         self.feeds = [
-            MarketNewsFeed(equity),
+            MarketNewsFeed(),
             PressFeed(equity),
             SocialFeed(equity),
             WebFeed(equity),

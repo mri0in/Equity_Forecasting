@@ -30,11 +30,12 @@ class SentimentPanel:
         self.feeds = ["Market_News", "Press", "Social", "Web"]
         self.feed_scores: Dict[str, float] = {}
         self.overall_sentiment: float = 0.0
+        self.is_sim_data: bool = True  # Flag to indicate if data is simulated
 
     # -------------------------------
     # Fetch aggregated sentiment
     # -------------------------------
-    def fetch_real_sentiment(self) -> None:
+    def fetch_real_sentiment(self) -> bool:
         """
         Fetch feed-wise sentiment and overall sentiment from SentimentAggregator.
         """
@@ -42,12 +43,15 @@ class SentimentPanel:
             logger.warning("No equity specified for fetching sentiment")
             return
 
+        is_sim_data = True
 
         try:
             aggregator = SentimentAggregator(equity=self.equity)
             result = aggregator.SentimentRunner()
             self.feed_scores = result.get("feed_scores", {})
             self.overall_sentiment = result.get("overall_sentiment", 0.0)
+            is_sim_data = False
+            self.is_sim_data = False
             logger.info(
                 f"Fetched aggregated sentiment for {self.equity}: "
                 f"{self.feed_scores}, overall {self.overall_sentiment}"
@@ -55,6 +59,9 @@ class SentimentPanel:
         except Exception as e:
             logger.error(f"Fetching aggregated sentiment failed for {self.equity}: {e}")
             self.simulate_sentiment()
+            is_sim_data = True
+        
+        return is_sim_data
 
     # -------------------------------
     # Data Simulation (fallback)
@@ -69,9 +76,11 @@ class SentimentPanel:
         self.feed_scores = {
             feed: np.round(np.random.uniform(-1, 1), 2) for feed in self.feeds
         }
+
         self.overall_sentiment = round(
             sum(self.feed_scores.values()) / len(self.feed_scores), 2
         )
+        
         logger.info(
             f"Simulated sentiment for {self.equity}: "
             f"{self.feed_scores}, overall {self.overall_sentiment}"
@@ -92,7 +101,7 @@ class SentimentPanel:
         fig = go.Figure(
             go.Bar(
                 x=list(self.feed_scores.values()),
-                y=list(self.feed_scores.keys()),
+                y = [f"{k}*" if self.is_sim_data else k for k in self.feed_scores.keys()],
                 orientation="h",
                 marker=dict(color=colors),
                 text=[f"{v:+.2f}" for v in self.feed_scores.values()],
@@ -125,7 +134,8 @@ class SentimentPanel:
             value=gauge_value,
             number={'suffix': '', 'valueformat': '.2f'},
             delta={'reference': 0.5, 'increasing': {'color': "green"}, 'decreasing': {'color': "red"}},
-            title={'text': f"{self.equity} - Overall Sentiment"},
+            title={'text': f" {self.equity} - Overall Sentiment* " if self.is_sim_data                else f"{self.equity} - Overall Sentiment"},
+            
             gauge={
                 'axis': {'range': [0, 1], 'tickvals': [0, 0.25, 0.5, 0.75, 1],
                          'ticktext': ['-1', '-0.5', '0', '0.5', '1']},
@@ -156,7 +166,7 @@ class SentimentPanel:
     # -------------------------------
     # Layout Renderer
     # -------------------------------
-    def render_sentiment(self, use_real_data: bool = True) -> None:
+    def render_sentiment(self) ->  bool:
         """
         Render the sentiment panel.
         If use_real_data is True, fetch actual sentiment from aggregator.
@@ -166,13 +176,12 @@ class SentimentPanel:
             st.warning("No equity selected for sentiment panel.")
             return
 
-        if use_real_data:
-            self.fetch_real_sentiment()
-        else:
-            self.simulate_sentiment()
-
+        is_sim_data = self.fetch_real_sentiment()
+        
         col_a, col_b = st.columns([6, 4])
         with col_a:
             self.render_bullet_chart(container=st)
         with col_b:
             self.render_overall_gauge(container=st)
+        
+        return is_sim_data

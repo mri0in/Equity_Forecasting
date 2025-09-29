@@ -38,7 +38,7 @@ class SentimentModel:
         - "hf:<name>" → Any Hugging Face model registered in ModelRegistry.
     """
 
-    def __init__(self, model_name: str = "finbert"):
+    def __init__(self, model_name: str = "textblob"):
         """
         Initialize the sentiment model.
 

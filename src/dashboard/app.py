@@ -100,6 +100,14 @@ def main():
                 "<small>'*' is result based on simulated data not real market data.</small>",
                 unsafe_allow_html=True
             )
+            logger.warning("Displayed sentiment is based on simulated data.")
+            
+        else:
+            st.markdown(
+                "<small>'✅' indicates live market feed.</small>",
+                unsafe_allow_html=True
+            )
+            logger.info("Displayed sentiment is based on live market data.")    
 
     st.markdown("<div style='height:15px'></div>", unsafe_allow_html=True)
 
@@ -107,7 +115,7 @@ def main():
     if current_equity:
         with st.container():
             st.markdown(
-                "<h4 style='border-bottom:1px solid #ccc; padding-bottom:5px;'>Combined Output Table</h4>",
+                "<h4 style='border-bottom:1px solid #ccc; padding-bottom:5px;'>Combined Output Table< h4>",
                 unsafe_allow_html=True,
             )
             combined_table = CombinedTable(

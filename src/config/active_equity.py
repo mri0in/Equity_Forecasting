@@ -1,5 +1,4 @@
-# src/features/market_sentiment/active_equity/active_equity.py
-
+# src/config/active_equity.py
 from typing import Optional
 import yfinance as yf
 from src.dashboard.utils import validate_equity

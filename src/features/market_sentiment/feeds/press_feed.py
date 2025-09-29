@@ -5,7 +5,7 @@ from datetime import datetime
 import feedparser
 from .base_feed import BaseFeed
 from ..feed_schemas.news_item import NewsItem
-from src.features.market_sentiment.active_equity.active_equity import ActiveEquity
+from src.config.active_equity import ActiveEquity
 from src.utils.logger import get_logger
 
 logger = get_logger("PressFeed")
@@ -21,7 +21,7 @@ class PressFeed(BaseFeed):
         self.active_equity = ActiveEquity()
 
     def fetch_data(self) -> List[NewsItem]:
-        ticker = self.active_equity.get_ticker()
+        ticker = self.active_equity.get_active_equity()
         if not ticker:
             raise ValueError("Active equity ticker not set.")
 

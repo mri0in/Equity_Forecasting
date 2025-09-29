@@ -1,6 +1,8 @@
 # src/features/market_sentiment/processing/pre_processor.py
 import re
+import nltk
 from typing import List
+from nltk.corpus import stopwords
 from src.utils.logger import get_logger
 
 logger = get_logger("processing")
@@ -76,13 +78,19 @@ class TextPreProcessor:
         Args:
             language (str): Language for stopword filtering. Default = "english".
         """
+        self.stop_words = set()  # default empty set to avoid crashes
         try:
             self.stop_words = set(stopwords.words(language))
             logger.debug("Stopwords loaded for language: %s", language)
         except LookupError:
-            # Handle if NLTK stopwords not downloaded
-            logger.error("NLTK stopwords not found. Run nltk.download('stopwords').")
-            self.stop_words = set()
+            logger.warning("Stopwords not found, attempting to download...")
+            try:
+                nltk.download("stopwords", quiet=True)
+                self.stop_words = set(stopwords.words(language))
+                logger.info("Stopwords successfully downloaded for language: %s", language)
+            except Exception as e:
+                logger.error("Failed to download stopwords: %s", e)
+                logger.warning("Continuing without stopwords; text processing may be affected.")
 
     def clean_text(self, text: str) -> str:
         """

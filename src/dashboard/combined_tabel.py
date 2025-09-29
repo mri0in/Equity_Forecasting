@@ -36,10 +36,10 @@ class CombinedTable:
 
         data = {
             "Equity": [self.equity],
-            "Market_News": [self.feed_scores.get("Market_News", 0.0)],
-            "Press": [self.feed_scores.get("Press", 0.0)],
-            "Social": [self.feed_scores.get("Social", 0.0)],
             "Web": [self.feed_scores.get("Web", 0.0)],
+            "Social": [self.feed_scores.get("Social", 0.0)],
+            "Press": [self.feed_scores.get("Press", 0.0)],
+            "Market News": [self.feed_scores.get("Market_News", 0.0)],
             "Overall Sentiment": [self.overall_sentiment],
             "Forecast Next Price": [self.forecast_prices[-1] if self.forecast_prices else None]
         }

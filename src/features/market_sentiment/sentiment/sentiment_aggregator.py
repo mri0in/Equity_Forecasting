@@ -45,7 +45,7 @@ class SentimentAggregator:
         """
         Args:
             equity (str): Active equity ticker or name.
-            model_backend (str): Sentiment backend to use: "textblob" or "finbert".
+            model_backend (str): Sentiment backend to use: "textblob" or "finbert(default)".
             (Custom ML can be added later behind the same interface.)
         """
         self.equity = equity
@@ -63,9 +63,9 @@ class SentimentAggregator:
         # Initialize feed handlers for this equity
         self.feeds = [
             MarketNewsFeed(),
-            PressFeed(equity),
-            SocialFeed(equity),
-            WebFeed(equity),
+            PressFeed(),
+            SocialFeed(),
+            WebFeed(),
         ]
 
         # Processing utilities
@@ -73,7 +73,7 @@ class SentimentAggregator:
         self.extractor = Extractor()
 
         # Sentiment model with selected backend (TextBlob/FinBERT implemented now)
-        self.sentiment_model = SentimentModel(backend=model_backend)
+        self.sentiment_model = SentimentModel(model_name=model_backend)
 
         logger.info(
             f"SentimentAggregator initialized | equity={equity} | backend={model_backend}"

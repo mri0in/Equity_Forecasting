@@ -1,16 +1,15 @@
 # src/features/market_sentiment/sentiment/sentiment_aggregator.py
-
-from typing import Dict, Any, List
 from src.utils.logger import get_logger
-
-from src.features.market_sentiment.feeds.market_news_feed import MarketNewsFeed
+from src.features.market_sentiment.feeds.news_feed import NewsFeed
 from src.features.market_sentiment.feeds.press_feed import PressFeed
 from src.features.market_sentiment.feeds.social_feed import SocialFeed
 from src.features.market_sentiment.feeds.web_feed import WebFeed
-
 from src.features.market_sentiment.processing.pre_processor import TextPreProcessor
 from src.features.market_sentiment.processing.extractor import Extractor
 from src.features.market_sentiment.sentiment.sentiment_model import SentimentModel
+
+from typing import Dict, Any, List, Tuple
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 """
 Sentiment Aggregator Module
@@ -43,18 +42,19 @@ class SentimentAggregator:
 
     def __init__(self, equity: str, model_backend: str = "finbert"):
         """
+        Initialize SentimentAggregator.
+
         Args:
             equity (str): Active equity ticker or name.
             model_backend (str): Sentiment backend to use: "textblob" or "finbert(default)".
-            (Custom ML can be added later behind the same interface.)
         """
         self.equity = equity
 
-        # fallback model
-        self.fallback_model = "textblob"
+        # Fallback model in case of unknown backend
+        self.fallback_model = "textblob"    
 
         # Validate requested backend
-        allowed_models = ["finbert",  "roberta-financial-news", "distilbert-sst2","textblob"]
+        allowed_models = ["finbert", "roberta-financial-news", "distilbert-sst2", "textblob"]
         if model_backend not in allowed_models:
             logger.warning(f"Unknown backend '{model_backend}', falling back to {self.fallback_model}")
             model_backend = self.fallback_model
@@ -62,7 +62,7 @@ class SentimentAggregator:
 
         # Initialize feed handlers for this equity
         self.feeds = [
-            MarketNewsFeed(),
+            NewsFeed(),
             PressFeed(),
             SocialFeed(),
             WebFeed(),
@@ -81,17 +81,71 @@ class SentimentAggregator:
 
     def _clean_text(self, text: str) -> str:
         """
-        Internal helper to call the appropriate preprocessor method.
-        Supports either `clean_text` or `clean` depending on your implementation.
+        Internal helper to clean raw text using preprocessor.
         """
         if hasattr(self.preprocessor, "clean_text"):
             return self.preprocessor.clean_text(text)
-        # Fallback for earlier naming
+        # Fallback for older naming
         return self.preprocessor.clean(text)  # type: ignore[attr-defined]
+
+    def _process_feed(self, feed) -> Tuple[str, float]:
+        """
+        Process a single feed: fetch, validate, preprocess, and score sentiment.
+        Returns the feed name and its average sentiment score.
+
+        Steps:
+            1) Fetch raw data from the feed
+            2) Validate the data
+            3) Preprocess text
+            4) Extract relevant financial text
+            5) Perform sentiment scoring per item
+            6) Aggregate per-feed average sentiment
+        """
+        try:
+            # 1) Fetch raw items from feed
+            raw_items = feed.fetch_data()
+            logger.info(f"{feed.source_name}: fetched {len(raw_items)} raw items")
+        except Exception as e:
+            # Log and return 0 if fetching fails
+            logger.error(f"{feed.source_name}: failed to fetch data: {e}")
+            return feed.source_name, 0.0
+
+        # 2) Validate feed data
+        if not feed.validate_data(raw_items):
+            logger.warning(f"{feed.source_name}: invalid or empty data, skipping.")
+            return feed.source_name, 0.0
+
+        # 3) Preprocess -> 4) Extract relevant text
+        processed_texts: List[str] = [self._clean_text(item.text) for item in raw_items]
+        extracted_texts: List[str] = [
+            self.extractor.extract_relevant_text(text) for text in processed_texts
+        ]
+        logger.info(f"{feed.source_name}: processed {len(extracted_texts)} texts for sentiment")
+
+        # 5) Sentiment scoring (TextBlob/FinBERT implemented now)
+        scores: List[float] = []
+        for idx, text in enumerate(extracted_texts):
+            try:
+                score = self.sentiment_model.analyze_text(text)
+                scores.append(score)
+            except Exception as e:
+                # Log per-item sentiment failures but continue
+                logger.error(f"{feed.source_name}: failed to analyze text {idx}: {e}")
+
+        # 6) Aggregate per-feed sentiment
+        avg_score = (sum(scores) / len(scores)) if scores else 0.0
+        logger.info(
+            f"{feed.source_name}: avg sentiment score {avg_score:.3f} (backend={self.model_backend})"
+        )
+        return feed.source_name, avg_score
 
     def SentimentRunner(self) -> Dict[str, Any]:
         """
-        Execute the sentiment aggregation pipeline.
+        Execute the sentiment aggregation pipeline in parallel for all feeds.
+
+        Each feed is processed in its own thread. Failures at any stage
+        (fetch, validation, per-item sentiment scoring) are logged but do not
+        stop the overall pipeline.
 
         Returns:
             Dict[str, Any]: Combined sentiment results containing:
@@ -101,37 +155,17 @@ class SentimentAggregator:
         """
         feed_scores: Dict[str, float] = {}
 
-        for feed in self.feeds:
-            # 1) Fetch
-            raw_items = feed.fetch_data()
-            logger.info(f"{feed.source_name}: fetched {len(raw_items)} raw items")
+        # Run each feed in parallel using ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=len(self.feeds)) as executor:
+            # Submit each feed to the executor
+            future_to_feed = {executor.submit(self._process_feed, feed): feed for feed in self.feeds}
+            
+            # As each thread completes, collect its feed score
+            for future in as_completed(future_to_feed):
+                feed_name, avg_score = future.result()
+                feed_scores[feed_name] = avg_score
 
-            # 2) Validate
-            if not feed.validate_data(raw_items):
-                logger.warning(f"{feed.source_name}: invalid or empty data, skipping.")
-                continue
-
-            # 3) Preprocess -> 4) Extract relevant text
-            processed_texts: List[str] = [self._clean_text(item.text) for item in raw_items]
-            extracted_texts: List[str] = [
-                self.extractor.extract_relevant_text(text) for text in processed_texts
-            ]
-            logger.info(
-                f"{feed.source_name}: processed {len(extracted_texts)} texts for sentiment"
-            )
-
-            # 5) Sentiment scoring (TextBlob/FinBERT implemented now)
-            scores: List[float] = [self.sentiment_model.analyze(text) for text in extracted_texts]
-
-            # 6) Aggregate per-feed
-            avg_score = (sum(scores) / len(scores)) if scores else 0.0
-            feed_scores[feed.source_name] = avg_score
-            logger.info(
-                f"{feed.source_name}: avg sentiment score {avg_score:.3f} "
-                f"(backend={self.model_backend})"
-            )
-
-        # 7) Aggregate overall
+        # 7) Aggregate overall sentiment from all feeds
         overall_sentiment = (sum(feed_scores.values()) / len(feed_scores)) if feed_scores else 0.0
         logger.info(
             f"{self.equity}: aggregated sentiment {overall_sentiment:.3f} "

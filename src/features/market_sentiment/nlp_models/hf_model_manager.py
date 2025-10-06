@@ -19,7 +19,7 @@ import os
 import logging
 from typing import Optional, Dict, Any
 from dotenv import load_dotenv
-from transformers import pipeline, Pipeline
+from transformers import pipeline, Pipeline, AutoTokenizer, AutoModelForSequenceClassification
 from src.features.market_sentiment.nlp_models.model_registry import ModelRegistry
 
 load_dotenv()  # Load environment variables from .env file
@@ -61,11 +61,14 @@ class HFModelManager:
 
         Raises:
             ValueError: If model is not found in registry.
+            RuntimeError: If the pipeline fails to load.
         """
+        # Return from cache if already loaded
         if model_name in self._pipelines:
             self._logger.debug("Pipeline for '%s' fetched from cache.", model_name)
             return self._pipelines[model_name]
 
+        # Retrieve model metadata from registry
         model_info: Dict[str, Any] = self._registry.get_model(model_name)
 
         self._logger.info(
@@ -73,17 +76,32 @@ class HFModelManager:
         )
 
         try:
+            # 1) Load tokenizer with auth token if provided
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_info["hf_id"],
+                use_auth_token=self._hf_token if self._hf_token else None
+            )
+
+            # 2) Load model with auth token if provided
+            model = AutoModelForSequenceClassification.from_pretrained(
+                model_info["hf_id"],
+                use_auth_token=self._hf_token if self._hf_token else None
+            )
+
+            # 3) Create a Hugging Face pipeline with preloaded model and tokenizer
             nlp_pipeline: Pipeline = pipeline(
                 task=model_info["task"],
-                model=model_info["hf_id"],
-                tokenizer=model_info["hf_id"],
-                use_auth_token=self._hf_token if self._hf_token else None,
+                model=model,
+                tokenizer=tokenizer
             )
+
+            # Cache the pipeline for future use
             self._pipelines[model_name] = nlp_pipeline
             self._logger.info("Pipeline for '%s' loaded successfully.", model_name)
             return nlp_pipeline
 
         except Exception as e:
+            # Log full exception and raise runtime error
             self._logger.exception("Failed to load model '%s': %s", model_name, str(e))
             raise RuntimeError(f"Could not load Hugging Face model '{model_name}'.")
 

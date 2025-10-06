@@ -5,7 +5,7 @@ from datetime import datetime
 import feedparser
 from .base_feed import BaseFeed
 from ..feed_schemas.news_item import NewsItem
-from src.config.active_equity import ActiveEquity
+from src.config.active_equity import get_active_equity
 from src.utils.logger import get_logger
 
 logger = get_logger("PressFeed")
@@ -18,10 +18,9 @@ class PressFeed(BaseFeed):
 
     def __init__(self):
         super().__init__("PressFeed")
-        self.active_equity = ActiveEquity()
 
     def fetch_data(self) -> List[NewsItem]:
-        ticker = self.active_equity.get_active_equity()
+        ticker = get_active_equity()
         if not ticker:
             raise ValueError("Active equity ticker not set.")
 
@@ -30,11 +29,11 @@ class PressFeed(BaseFeed):
         sources = [
             
             (f"https://www.bseindia.com/xml-data/corp/{ticker}.xml", "BSE India"),
-            (f"https://www.nseindia.com/rss/company/{ticker}/press-releases.xml", "NSE India")
+            (f"https://www.nseindia.com/rss/company/{ticker}/press-releases.xml", "NSE India"),
             (f"https://www.nasdaq.com/market-activity/stocks/{ticker}/press-releases", "Nasdaq"),
             (f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={ticker}&type=8-K&dateb=&owner=exclude&count=40&output=atom", "SEC.gov"),
-            (f"https://www.nyse.com/quote/XNYS:{ticker}/press-releases", "NYSE  ")
-            
+            (f"https://www.nyse.com/quote/XNYS:{ticker}/press-releases", "NYSE"),
+            (f"https://www.prnewswire.com/rss/{ticker}-news.rss", "PR Newswire"),
             ]   
 
         for url, source_name in sources:
@@ -52,7 +51,8 @@ class PressFeed(BaseFeed):
                             text=entry.get("summary", ""),
                             source=source_name,
                             date=published,
-                            ticker=ticker
+                            ticker=ticker,
+                            feed_name="PressFeed"   
                         )
                     )
             except Exception as e:

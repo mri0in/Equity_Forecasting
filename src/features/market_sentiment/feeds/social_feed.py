@@ -6,7 +6,7 @@ import os
 import requests
 from .base_feed import BaseFeed
 from ..feed_schemas.news_item import NewsItem
-from src.config.active_equity import ActiveEquity
+from src.config.active_equity import get_active_equity
 from src.utils.logger import get_logger
 
 logger = get_logger("SocialFeed")
@@ -23,7 +23,6 @@ class SocialFeed(BaseFeed):
 
     def __init__(self):
         super().__init__("SocialFeed")
-        self.active_equity = ActiveEquity()
         self.twitter_bearer_token = os.getenv("TWITTER_BEARER_TOKEN")  # optional
 
     def _fetch_twitter(self, ticker: str) -> List[NewsItem]:
@@ -50,9 +49,10 @@ class SocialFeed(BaseFeed):
                     source="Twitter",
                     date=datetime.fromisoformat(tw["created_at"].replace("Z", "+00:00")),
                     ticker=ticker,
+                    feed_name="TwitterFeed"
                 )
             )
-        return tweets[:10]
+        return tweets[:30]
 
     def _fetch_reddit(self, ticker: str) -> List[NewsItem]:
         """Fetch Reddit posts via pushshift (no creds)."""
@@ -72,9 +72,10 @@ class SocialFeed(BaseFeed):
                     source="Reddit",
                     date=datetime.now(),
                     ticker=ticker,
+                    feed_name="RedditFeed"
                 )
             )
-        return posts[:10]
+        return posts[:30]
 
     def _fallback_dummy(self, ticker: str) -> List[NewsItem]:
         """Return dummy social posts if no real feed works."""
@@ -90,12 +91,13 @@ class SocialFeed(BaseFeed):
                 source=entry["source"],
                 date=datetime.now(),
                 ticker=ticker,
+                feed_name="DummySocialFeed"
             )
             for entry in dummy_posts
         ]
 
     def fetch_data(self) -> List[NewsItem]:
-        ticker = self.active_equity.get_active_equity()
+        ticker = get_active_equity()
         if not ticker:
             raise ValueError("Active equity ticker not set.")
 

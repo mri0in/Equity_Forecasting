@@ -5,7 +5,7 @@ from datetime import datetime
 import feedparser
 from .base_feed import BaseFeed
 from ..feed_schemas.news_item import NewsItem
-from src.config.active_equity import ActiveEquity
+from src.config.active_equity import get_active_equity
 from src.utils.logger import get_logger
 
 logger = get_logger("WebFeed")
@@ -18,26 +18,25 @@ class WebFeed(BaseFeed):
 
     def __init__(self):
         super().__init__("WebFeed")
-        self.active_equity = ActiveEquity()
 
     def fetch_data(self) -> List[NewsItem]:
-        ticker = self.active_equity.get_active_equity()
+        ticker = get_active_equity()
         if not ticker:
             raise ValueError("Active equity ticker not set.")
 
         all_items: List[NewsItem] = []
 
         sources = [
-            (f"https://www.moneycontrol.com/rss/company/{ticker}/press-releases.xml", "MoneyControl"),
-            (f"https://www.financialexpress.com/market/{ticker}-rss/", "Financial Express"),
-            (f"https://www.livemint.com/rss/{ticker}.xml", "LiveMint")
-            (f"https://news.google.com/rss/search?q={ticker}+stock", "Google News")
+        (f"https://www.moneycontrol.com/rss/company/{ticker}/news.xml", "MoneyControl"),
+        (f"https://www.financialexpress.com/market/{ticker}-rss/", "Financial Express"),
+        (f"https://news.google.com/rss/search?q={ticker}+stock+news", "Google News"),
+        (f"https://inshorts.com/en/read/{ticker}", "InShorts"),
         ]
 
         for url, source_name in sources:
             try:
                 feed = feedparser.parse(url)
-                for entry in feed.entries[:10]:
+                for entry in feed.entries[:30]:
                     published = (
                         datetime(*entry.published_parsed[:6])
                         if hasattr(entry, "published_parsed") else datetime.utcnow()
@@ -48,7 +47,8 @@ class WebFeed(BaseFeed):
                             text=entry.get("summary", ""),
                             source=source_name,
                             date=published,
-                            ticker=ticker
+                            ticker=ticker,
+                            feed_name="WebFeed"
                         )
                     )
             except Exception as e:

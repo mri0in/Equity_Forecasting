@@ -18,12 +18,14 @@ class NewsItem:
         source (str): Source name (e.g., news, social, press, web).
         ticker (Optional[str]): Related stock ticker, if available.
         url (Optional[str]): Link to the original content.
+        feed_name (Optional[str]): Name of the feed that provided this item.
     """
     title: str
     text: str
     date: datetime
     source: str
-    ticker: str = field(default="")  # Added ticker field
+    ticker: str = field(default="")  
+    feed_name: Optional[str] = field(default=None)
 
     def __post_init__(self):
         """
@@ -36,4 +38,4 @@ class NewsItem:
                 missing.append(attr)
         if missing:
             logger.warning(f"NewsItem missing required fields: {missing} | {self}")
-        logger.info(f"NewsItem created: {self.title} from {self.source} for {self.ticker}")
+        logger.info(f"{self.feed_name} item added: '{self.title}' from {self.source} for {self.ticker}")

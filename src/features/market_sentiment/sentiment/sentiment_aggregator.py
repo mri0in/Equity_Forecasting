@@ -39,6 +39,9 @@ class SentimentAggregator:
     Orchestrates fetching, preprocessing, extraction, and sentiment scoring.
     Produces an equity-level sentiment summary.
     """
+    class AllNonSocialFeedsFailed(Exception):
+        """Raised when all feeds except SocialFeed fail to fetch/process sentiment."""
+        pass
 
     def __init__(self, equity: str, model_backend: str = "finbert"):
         """
@@ -121,6 +124,7 @@ class SentimentAggregator:
             self.extractor.extract_relevant_text(text) for text in processed_texts
         ]
         logger.info(f"{feed.source_name}: processed {len(extracted_texts)} texts for sentiment")
+        logger.info(f"{feed.source_name}: extracted_texts = {extracted_texts}")
 
         # 5) Sentiment scoring (TextBlob/FinBERT implemented now)
         scores: List[float] = []
@@ -164,6 +168,15 @@ class SentimentAggregator:
             for future in as_completed(future_to_feed):
                 feed_name, avg_score = future.result()
                 feed_scores[feed_name] = avg_score
+
+        # Check if all non-social feeds failed and raise exception if so
+        non_social_scores = [
+            score for feed_name, score in feed_scores.items()
+            if feed_name.lower() != "socialfeed"
+        ]
+        if all(score == 0.0 for score in non_social_scores):
+            logger.error("All non-social feeds failed. Raising exception to trigger simulated data.")
+            raise self.AllNonSocialFeedsFailed()
 
         # 7) Aggregate overall sentiment from all feeds
         overall_sentiment = (sum(feed_scores.values()) / len(feed_scores)) if feed_scores else 0.0

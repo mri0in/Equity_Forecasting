@@ -127,6 +127,7 @@ class TextPreProcessor:
         tokens = [word for word in text.split() if word not in self.stop_words]
 
         cleaned_text = " ".join(tokens)
+        logger.info("Cleaned Text: %s", cleaned_text)
         logger.debug("Cleaned text: %s", cleaned_text)
 
         return cleaned_text

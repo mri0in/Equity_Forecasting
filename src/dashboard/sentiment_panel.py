@@ -56,11 +56,13 @@ class SentimentPanel:
                 f"Fetched aggregated sentiment for {self.equity}: "
                 f"{self.feed_scores}, overall {self.overall_sentiment}"
             )
+        except SentimentAggregator.AllNonSocialFeedsFailed:
+            logger.warning(f"Using simulated sentiment for {self.equity} (all non-social feeds failed).")
+            self.simulate_sentiment()
+            self.is_sim_data = True
         except Exception as e:
             logger.error(f"Fetching aggregated sentiment failed for {self.equity}: {e}")
-            self.simulate_sentiment()
-            is_sim_data = True
-        
+            raise
         return is_sim_data
 
     # -------------------------------

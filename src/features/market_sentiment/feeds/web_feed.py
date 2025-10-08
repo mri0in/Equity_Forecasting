@@ -17,7 +17,7 @@ class WebFeed(BaseFeed):
     """
 
     def __init__(self):
-        super().__init__("WebFeed")
+        super().__init__(source_name="WebFeed")
 
     def fetch_data(self) -> List[NewsItem]:
         ticker = get_active_equity()
@@ -39,12 +39,14 @@ class WebFeed(BaseFeed):
                 for entry in feed.entries[:30]:
                     published = (
                         datetime(*entry.published_parsed[:6])
-                        if hasattr(entry, "published_parsed") else datetime.utcnow()
+                        if hasattr(entry, "published_parsed")
+                        else datetime.now()
                     )
+                    text = entry.get("summary", "") or getattr(entry, "description", "") or ""
                     all_items.append(
                         NewsItem(
                             title=entry.title,
-                            text=entry.get("summary", ""),
+                            text=text,
                             source=source_name,
                             date=published,
                             ticker=ticker,

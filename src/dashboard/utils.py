@@ -56,7 +56,9 @@ def validate_equity(equity: str) -> bool:
 
     # Add NSE and BSE variants if not already suffixed
     if not symbol.endswith(".NS"):
-        candidates.append(f"{symbol}.NS")
+        candidates.append(f"{symbol}.NS")         # Regular NSE
+        candidates.append(f"{symbol}-SM.NS")     # NSE small-cap
+        candidates.append(f"{symbol}-ST.NS")     # NSE short-term
     if not symbol.endswith(".BO"):
         candidates.append(f"{symbol}.BO")
 

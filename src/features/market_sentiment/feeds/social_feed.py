@@ -22,7 +22,7 @@ class SocialFeed(BaseFeed):
     """
 
     def __init__(self):
-        super().__init__("SocialFeed")
+        super().__init__(source_name="SocialFeed")
         self.twitter_bearer_token = os.getenv("TWITTER_BEARER_TOKEN")  # optional
 
     def _fetch_twitter(self, ticker: str) -> List[NewsItem]:

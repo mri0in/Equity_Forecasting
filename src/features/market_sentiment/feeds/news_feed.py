@@ -63,11 +63,11 @@ class NewsFeed(BaseFeed):
                         if hasattr(entry, "published_parsed")
                         else datetime.now()
                     )
-
+                    text = entry.get("summary", "") or getattr(entry, "description", "") or ""
                     all_news.append(
                         NewsItem(
                         title=entry.title,
-                        text=entry.get("summary", ""),
+                        text=text,
                         source=source_name,
                         date=published,
                         ticker=ticker,

@@ -27,7 +27,7 @@ class SentimentPanel:
 
     def __init__(self, equity: str):
         self.equity = equity.upper()
-        self.feeds = ["Market_News", "Press", "Social", "Web"]
+        self.feeds = ["News", "Press", "Social", "Web"]
         self.feed_scores: Dict[str, float] = {}
         self.overall_sentiment: float = 0.0
         self.is_sim_data: bool = True  # Flag to indicate if data is simulated

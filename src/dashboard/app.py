@@ -115,7 +115,7 @@ def main():
     if current_equity:
         with st.container():
             st.markdown(
-                "<h4 style='border-bottom:1px solid #ccc; padding-bottom:5px;'>Combined Output Table< h4>",
+                "<h4 style='border-bottom:1px solid #ccc; padding-bottom:5px;'>Combined Output Table</h4>",
                 unsafe_allow_html=True,
             )
             combined_table = CombinedTable(

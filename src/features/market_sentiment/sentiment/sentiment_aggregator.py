@@ -1,4 +1,5 @@
 # src/features/market_sentiment/sentiment/sentiment_aggregator.py
+from statistics import median
 from src.utils.logger import get_logger
 from src.features.market_sentiment.feeds.news_feed import NewsFeed
 from src.features.market_sentiment.feeds.press_feed import PressFeed
@@ -82,15 +83,6 @@ class SentimentAggregator:
             f"SentimentAggregator initialized | equity={equity} | backend={model_backend}"
         )
 
-    def _clean_text(self, text: str) -> str:
-        """
-        Internal helper to clean raw text using preprocessor.
-        """
-        if hasattr(self.preprocessor, "clean_text"):
-            return self.preprocessor.clean_text(text)
-        # Fallback for older naming
-        return self.preprocessor.clean(text)  # type: ignore[attr-defined]
-
     def _process_feed(self, feed) -> Tuple[str, float]:
         """
         Process a single feed: fetch, validate, preprocess, and score sentiment.
@@ -102,7 +94,7 @@ class SentimentAggregator:
             3) Preprocess text
             4) Extract relevant financial text
             5) Perform sentiment scoring per item
-            6) Aggregate per-feed average sentiment
+            6) Aggregate per-feed average median sentiment
         """
         try:
             # 1) Fetch raw items from feed
@@ -123,6 +115,8 @@ class SentimentAggregator:
         extracted_texts: List[str] = [
             self.extractor.extract_relevant_text(text) for text in processed_texts
         ]
+        extracted_texts = [text for text in extracted_texts if text]  # filter empty
+        
         logger.info(f"{feed.source_name}: processed {len(extracted_texts)} texts for sentiment")
         logger.info(f"{feed.source_name}: extracted_texts = {extracted_texts}")
 
@@ -130,20 +124,31 @@ class SentimentAggregator:
         scores: List[float] = []
         for idx, text in enumerate(extracted_texts):
             try:
-                score = self.sentiment_model.analyze_text(text)
+                score = self.sentiment_model.analyze_text(text)["score"]
                 scores.append(score)
             except Exception as e:
                 # Log per-item sentiment failures but continue
                 logger.error(f"{feed.source_name}: failed to analyze text {idx}: {e}")
 
         # 6) Aggregate per-feed sentiment
-        avg_score = (sum(scores) / len(scores)) if scores else 0.0
+        non_zero_scores = [s for s in scores if s != 0.0]
+        median_score = median(non_zero_scores) if non_zero_scores else 0.0
         logger.info(
-            f"{feed.source_name}: avg sentiment score {avg_score:.3f} (backend={self.model_backend})"
+            f"{feed.source_name}: sentiment score {median_score:.3f} (backend={self.model_backend})"
         )
-        return feed.source_name, avg_score
+        return feed.source_name, median_score
 
-    def SentimentRunner(self) -> Dict[str, Any]:
+    def _clean_text(self, text: str) -> str:
+        """
+        Internal helper to clean raw text using preprocessor.
+        """
+        if hasattr(self.preprocessor, "clean_text"):
+            return self.preprocessor.clean_text(text)
+        # Fallback for older naming
+        return self.preprocessor.clean_text(text)  # type: ignore[attr-defined]
+    
+
+    def SentimentRunner(self, feed_timeout: float = 15.0) -> Dict[str, Any]:
         """
         Execute the sentiment aggregation pipeline in parallel for all feeds.
 
@@ -151,10 +156,13 @@ class SentimentAggregator:
         (fetch, validation, per-item sentiment scoring) are logged but do not
         stop the overall pipeline.
 
+        Args:
+        feed_timeout (float): Maximum time in seconds to wait per feed thread
+
         Returns:
             Dict[str, Any]: Combined sentiment results containing:
                 - equity: the equity identifier processed
-                - feed_scores: average sentiment score per feed
+                - feed_scores: median sentiment score per feed
                 - overall_sentiment: aggregated equity sentiment score
         """
         feed_scores: Dict[str, float] = {}
@@ -166,8 +174,19 @@ class SentimentAggregator:
             
             # As each thread completes, collect its feed score
             for future in as_completed(future_to_feed):
-                feed_name, avg_score = future.result()
-                feed_scores[feed_name] = avg_score
+                feed = future_to_feed[future]
+                feed_name = type(feed).__name__
+                try:
+                    # Wait for thread result with timeout
+                    _, median_score = future.result(timeout=feed_timeout)
+                    feed_scores[feed_name] = median_score
+                    logger.info(f"{feed_name}: completed with median_score={median_score:.3f}")
+                except TimeoutError:
+                    logger.warning(f"{feed_name}: timed out after {feed_timeout} seconds.")
+                    feed_scores[feed_name] = 0.0
+                except Exception as e:
+                    logger.exception(f"{feed_name}: failed during sentiment processing: {e}")
+                    feed_scores[feed_name] = 0.0
 
         # Check if all non-social feeds failed and raise exception if so
         non_social_scores = [
@@ -179,7 +198,9 @@ class SentimentAggregator:
             raise self.AllNonSocialFeedsFailed()
 
         # 7) Aggregate overall sentiment from all feeds
-        overall_sentiment = (sum(feed_scores.values()) / len(feed_scores)) if feed_scores else 0.0
+        non_zero_scores = [s for s in feed_scores.values() if s != 0.0]
+        overall_sentiment = median(non_zero_scores) if non_zero_scores else 0.0
+
         logger.info(
             f"{self.equity}: aggregated sentiment {overall_sentiment:.3f} "
             f"from {len(feed_scores)} feeds (backend={self.model_backend})"

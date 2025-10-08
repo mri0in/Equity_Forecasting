@@ -77,7 +77,7 @@ class SentimentModel:
 
     def analyze_text(self, text: str) -> Dict[str, Union[str, float]]:
         """
-        Analyze sentiment of a given text.
+        Analyze sentiment of a given text robustly.
 
         Args:
             text (str): Input text to analyze.
@@ -87,18 +87,24 @@ class SentimentModel:
                 - "label": str ("positive", "neutral", "negative")
                 - "score": float (continuous sentiment score [-1, 1])
         """
-        if not text or not isinstance(text, str):
-            logger.warning("Invalid text input received for sentiment analysis.")
+        # Convert to string and strip whitespace, handle None gracefully
+        text_to_analyze = str(text).strip() if text else ""
+
+        # Check if text is now empty after stripping
+        if not text_to_analyze:
+            logger.warning(
+                "Invalid text input received for sentiment analysis (empty or non-string)."
+            )
             return {"label": "neutral", "score": 0.0}
 
         try:
             if self.model_name == "textblob":
-                analysis = TextBlob(text)
+                analysis = TextBlob(text_to_analyze)
                 score = float(analysis.sentiment.polarity)
                 label = self._map_score_to_label(score)
 
             else:  # Hugging Face models (FinBERT or registry models)
-                result = self.pipeline(text)[0]
+                result = self.pipeline(text_to_analyze)[0]
                 raw_label = result["label"].lower()  # e.g., "positive"
 
                 # Convert HF label → unified schema
@@ -121,6 +127,7 @@ class SentimentModel:
         except Exception as e:
             logger.exception(f"Error analyzing text sentiment: {e}")
             return {"label": "neutral", "score": 0.0}
+
 
     def analyze_batch(self, texts: List[str]) -> List[Dict[str, Union[str, float]]]:
         """

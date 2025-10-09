@@ -97,7 +97,7 @@ def main():
 
         if sim_data_used:
             st.markdown(
-                "<small>'*' is result based on simulated data not real market data.</small>",
+                "<small>'⚠/*' is result based on simulated data not real market data.</small>",
                 unsafe_allow_html=True
             )
             logger.warning("Displayed sentiment is based on simulated data.")

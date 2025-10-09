@@ -111,7 +111,7 @@ class SentimentPanel:
             )
         )
         fig.update_layout(
-            title=f"{self.equity} - Feed-wise Sentiment *" if self.is_sim_data else f"{self.equity} - Feed-wise Sentiment ✅", # (*) for simulated data, ✅ for real data
+            title=f"{self.equity} - Feed-wise Sentiment ⚠" if self.is_sim_data else f"{self.equity} - Feed-wise Sentiment ✅", # ⚠ for simulated data, ✅ for real data
             xaxis=dict(title="Sentiment Score [-1,1]", range=[-1, 1]),
             yaxis=dict(title="Feeds"),
             template="plotly_white",
@@ -136,7 +136,7 @@ class SentimentPanel:
             value=gauge_value,
             number={'suffix': '', 'valueformat': '.2f'},
             delta={'reference': 0.5, 'increasing': {'color': "green"}, 'decreasing': {'color': "red"}},
-            title={'text': f" {self.equity} - Overall Sentiment *" if self.is_sim_data                else f"{self.equity} - Overall Sentiment ✅"}, # (*) for simulated data, ✅ for real data
+            title={'text': f" {self.equity} - Overall Sentiment ⚠" if self.is_sim_data                else f"{self.equity} - Overall Sentiment ✅"}, # ⚠ for simulated data, ✅ for real data
             
             gauge={
                 'axis': {'range': [0, 1], 'tickvals': [0, 0.25, 0.5, 0.75, 1],

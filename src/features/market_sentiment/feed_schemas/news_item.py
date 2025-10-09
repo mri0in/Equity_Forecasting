@@ -37,5 +37,5 @@ class NewsItem:
             if not getattr(self, attr):
                 missing.append(attr)
         if missing:
-            logger.warning(f"NewsItem missing required fields: {missing} | {self}")
+            logger.warning(f"Missing required fields for {self.feed_name} item: {missing} | {self}")
         logger.info(f"{self.feed_name} item added: '{self.title}' from {self.source} for {self.ticker}")

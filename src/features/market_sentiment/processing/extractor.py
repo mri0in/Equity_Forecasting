@@ -62,7 +62,6 @@ class Extractor:
             r"\b(Inc\.?|Ltd\.?|Corp\.?|Company|Enterprises|Holdings)\b", re.IGNORECASE
         )
 
-        logger.info("Extractor initialized with hybrid heuristic patterns.")
 
     
     def extract_relevant_text(self, text: str) -> str:

@@ -179,7 +179,7 @@ class SentimentAggregator:
                 try:
                     # Wait for thread result with timeout
                     _, median_score = future.result(timeout=feed_timeout)
-                    feed_scores[feed_name] = median_score
+                    feed_scores[feed_name] = float(f"{median_score:.3f}")
                     logger.info(f"{feed_name}: completed with median_score={median_score:.3f}")
                 except TimeoutError:
                     logger.warning(f"{feed_name}: timed out after {feed_timeout} seconds.")

@@ -6,6 +6,7 @@ import feedparser
 from src.config.active_equity import get_active_equity
 from src.features.market_sentiment.feeds.base_feed import BaseFeed
 from src.features.market_sentiment.feed_schemas.news_item import NewsItem
+from src.dashboard.utils import isEquityIndOrUs
 from src.utils.logger import get_logger
 
 logger = get_logger("NewsFeed")
@@ -41,18 +42,26 @@ class NewsFeed(BaseFeed):
 
         all_news: List[NewsItem] = []
 
-        sources = [
-            # Global / institutional finance
-            (f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={ticker}&region=US&lang=en-US", "Yahoo Finance"),
-            (f"https://www.marketwatch.com/rss/headlines?s={ticker}", "MarketWatch"),
-            (f"https://www.reuters.com/companies/{ticker}.O/rss", "Reuters"),
-            (f"https://www.bloomberg.com/feeds/{ticker}.xml", "Bloomberg (if available)"),
-
-            # Indian financial media
-            (f"https://economictimes.indiatimes.com/markets/stocks/news/{ticker}.cms", "Economic Times"),
-            (f"https://www.business-standard.com/rss/company/{ticker}.rss", "Business Standard"),
-            (f"https://www.livemint.com/rss/markets/{ticker}.xml", "LiveMint"),
+        us_sources = [
+        (f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={ticker}&region=US&lang=en-US", "Yahoo Finance"),
+        (f"https://www.marketwatch.com/rss/headlines?s={ticker}", "MarketWatch"),
+        (f"https://www.reuters.com/companies/{ticker}.O/rss", "Reuters"),
+        (f"https://www.bloomberg.com/feeds/{ticker}.xml", "Bloomberg (if available)"),
         ]
+
+        in_sources = [
+        (f"https://economictimes.indiatimes.com/markets/stocks/news/{ticker}.cms", "Economic Times"),
+        (f"https://www.business-standard.com/rss/company/{ticker}.rss", "Business Standard"),
+        (f"https://www.livemint.com/rss/markets/{ticker}.xml", "LiveMint"),
+        (f"https://www.moneycontrol.com/rss/stockpricefeed/{ticker}.xml", "MoneyControl"),
+        (f"https://www.ndtv.com/business/stock/{ticker}/news", "NDTV Profit"),]
+
+        if isEquityIndOrUs() == "IND":
+            sources = in_sources 
+        elif isEquityIndOrUs() == "USA":
+            sources = us_sources    
+        else:
+            sources = us_sources + in_sources
 
         for url, source_name in sources:
             try:

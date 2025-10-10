@@ -4,6 +4,7 @@ import logging
 from typing import Optional
 import yfinance as yf
 
+global equitywithsuffix
 # -------------------------------
 # Logger Function
 # -------------------------------
@@ -45,6 +46,8 @@ def validate_equity(equity: str) -> bool:
     Returns:
         bool: True if the ticker is valid and has historical data, False otherwise.
     """
+    global equitywithsuffix
+
     if not isinstance(equity, str) or not equity.strip():
         return False
 
@@ -68,14 +71,34 @@ def validate_equity(equity: str) -> bool:
             hist = ticker.history(period="1d")
             if hist is not None and not hist.empty:
                 logger.info(f"Equity validation passed for: {candidate}")
+                equitywithsuffix = candidate
                 return True
             else:
                 logger.warning(f"No historical data found for: {candidate}")
         except Exception as e:
-            logger.error(f"Error validating equity {candidate}: {e}")
+            continue
 
-    logger.warning(f"Equity validation failed for all candidates: {candidates}")
+    logger.warning(f"Equity validation failed for all candidates of: {candidates}")
     return False
+
+def isEquityIndOrUs() -> str:
+    """
+    Determine if the equity ticker is Indian or US based on suffix.
+
+    Args:
+        equity (str): Equity ticker symbol
+
+    Returns:
+        str: 'IND' if Indian, 'USA' if US, '' if unknown
+    """
+    ticker = equitywithsuffix
+    if ticker.endswith(".NS") or ticker.endswith(".BO"):
+        return "IND"
+    elif "." not in ticker:
+        return "USA"
+    else:
+        return ""   
+
 
 def normalize_score(score: float, min_val: float = -1.0, max_val: float = 1.0) -> float:
     """

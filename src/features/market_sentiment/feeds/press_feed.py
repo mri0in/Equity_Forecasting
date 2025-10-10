@@ -32,7 +32,7 @@ class PressFeed(BaseFeed):
         all_items: List[NewsItem] = []
 
         sources = [
-            # NSE CSV API (new method handles session and headers)
+            # NSE CSV API
             (f"https://www.nseindia.com/api/corporate-announcements?index=equities&symbol={ticker}&csv=true",
              "NSE India", "csv_api"),
             # BSE corporate announcements page (HTML)
@@ -57,7 +57,7 @@ class PressFeed(BaseFeed):
                 if feed_type == "html":
                     items = self.fetch_html_page(url, ticker)
                 elif feed_type == "csv_api":
-                    items = self.fetch_csv_api(url, ticker, source_name)
+                    items = self.fetch_csv_api(url, source_name, ticker)
                 elif feed_type == "api/json":
                     items = self.fetch_api_json(url, ticker)
                 elif feed_type in ("rss", "xml"):
@@ -74,28 +74,45 @@ class PressFeed(BaseFeed):
         self.log_fetch(len(all_items))
         return all_items
 
-    def fetch_csv_api(self, url: str, ticker: str, source_name: str) -> List[NewsItem]:
+    def fetch_csv_api(self, url: str, ticker: str, source_name: str) -> list[NewsItem]:
         """
         Fetch NSE corporate announcements in CSV format and extract press releases.
-        Uses session + headers to avoid 401 Unauthorized.
+        Uses a session with proper headers to avoid 401 Unauthorized.
         """
-        items: List[NewsItem] = []
+        import csv
+        from datetime import datetime
+        import requests
 
-        session = requests.Session()
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-            "Accept": "text/csv,application/vnd.ms-excel,application/json;q=0.9,*/*;q=0.8",
-            "Referer": "https://www.nseindia.com",
-            "Origin": "https://www.nseindia.com"
-        }
+        items: list[NewsItem] = []
 
         try:
-            # Initial GET to set cookies
-            session.get("https://www.nseindia.com", headers=headers, timeout=10)
+            session = requests.Session()
 
-            response = session.get(url, headers=headers, timeout=10)
+            # Step 1: Visit NSE homepage to get cookies
+            homepage_url = "https://www.nseindia.com"
+            session.get(
+                homepage_url,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                                    "Chrome/140.0.0.0 Safari/537.36"},
+                timeout=10,
+            )
+
+            # Step 2: Prepare CSV URL and headers
+            csv_url = url.format(ticker=ticker)
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                            "AppleWebKit/537.36 (KHTML, like Gecko) "
+                            "Chrome/140.0.0.0 Safari/537.36",
+                "Accept": "text/csv,application/vnd.ms-excel",
+                "Referer": f"https://www.nseindia.com/companies-listing/corporate-filings-announcements?symbol={ticker}&tabIndex=equity",
+            }
+
+            # Step 3: Fetch CSV
+            response = session.get(csv_url, headers=headers, timeout=15)
             response.raise_for_status()
 
+            # Step 4: Parse CSV
             reader = csv.DictReader(response.text.splitlines())
             for row in list(reader)[:20]:  # limit to first 20 announcements
                 if row.get("SUBJECT") != "Press Release":
@@ -117,7 +134,7 @@ class PressFeed(BaseFeed):
                             source=source_name,
                             date=published,
                             ticker=ticker,
-                            feed_name="PressFeed"
+                            feed_name="PressFeed",
                         )
                     )
 
@@ -128,7 +145,8 @@ class PressFeed(BaseFeed):
 
     def fetch_html_page(self, url: str, ticker: str) -> List[NewsItem]:
         """
-        Fetch press items from HTML pages (BSE, NASDAQ, NYSE)
+        Fetch press items from HTML pages (BSE, NASDAQ, NYSE) with actual press release content.
+        For NASDAQ/NYSE, grabs the main article headings and paragraphs instead of menu items.
         """
         headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get(url, headers=headers, timeout=10)
@@ -137,17 +155,77 @@ class PressFeed(BaseFeed):
         soup = BeautifulSoup(response.text, "html.parser")
         items: List[NewsItem] = []
 
+        domain = url.split("/")[2].lower()
+
+        # BSE: fallback to old logic
+        if "bseindia" in domain:
+            for elem in soup.find_all(["a", "h3"], limit=20):
+                title = elem.get_text(strip=True)
+                if title:
+                    items.append(
+                        NewsItem(
+                            title=title,
+                            text=title,
+                            source=domain,
+                            date=datetime.now(),
+                            ticker=ticker,
+                            feed_name="PressFeed"
+                        )
+                    )
+            return items
+
+        # NASDAQ: press releases are usually under <div class="quote-news-headlines__item-content"> or similar
+        if "nasdaq" in domain:
+            articles = soup.find_all("div", class_="quote-news-headlines__item-content")
+            for article in articles[:20]:
+                title_elem = article.find("a")
+                title = title_elem.get_text(strip=True) if title_elem else "Press Release"
+                # Sometimes NASDAQ has a short summary in <p>
+                text_elem = article.find("p")
+                text = text_elem.get_text(strip=True) if text_elem else title
+                items.append(
+                    NewsItem(
+                        title=title,
+                        text=text,
+                        source=domain,
+                        date=datetime.now(),
+                        ticker=ticker,
+                        feed_name="PressFeed"
+                    )
+                )
+            return items
+
+        # NYSE: press releases under <div class="press-release-card__content">
+        if "nyse" in domain:
+            articles = soup.find_all("div", class_="press-release-card__content")
+            for article in articles[:20]:
+                title_elem = article.find("h4")
+                title = title_elem.get_text(strip=True) if title_elem else "Press Release"
+                # Extract all paragraphs inside the card
+                paragraphs = [p.get_text(strip=True) for p in article.find_all("p")]
+                text = "\n".join(paragraphs) if paragraphs else title
+                items.append(
+                    NewsItem(
+                        title=title,
+                        text=text,
+                        source=domain,
+                        date=datetime.now(),
+                        ticker=ticker,
+                        feed_name="PressFeed"
+                    )
+                )
+            return items
+
+        # fallback generic logic if new domain
         for elem in soup.find_all(["a", "h3"], limit=20):
             title = elem.get_text(strip=True)
-            link = elem.get("href", url)
-            published = datetime.now()  # fallback if no date found
             if title:
                 items.append(
                     NewsItem(
                         title=title,
                         text=title,
-                        source=url.split("/")[2],
-                        date=published,
+                        source=domain,
+                        date=datetime.now(),
                         ticker=ticker,
                         feed_name="PressFeed"
                     )

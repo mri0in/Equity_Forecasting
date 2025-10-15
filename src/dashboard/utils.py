@@ -4,7 +4,11 @@ import logging
 from typing import Optional
 import yfinance as yf
 
+# Global variable as single point of truth
 global equitywithsuffix
+
+# Global in-memory cache for ticker validation
+_ticker_validation_cache: dict[str, str] = {}
 # -------------------------------
 # Logger Function
 # -------------------------------
@@ -54,6 +58,12 @@ def validate_equity(equity: str) -> bool:
     logger = logging.getLogger(__name__)
     symbol = equity.strip().upper()
 
+    # Check cache first
+    if symbol in _ticker_validation_cache:
+        equitywithsuffix = _ticker_validation_cache[symbol]
+        logger.info(f"Equity validation hit cache: {equitywithsuffix}")
+        return True
+
     # Candidate tickers in priority: US, NSE, BSE
     candidates = [symbol]
 
@@ -70,8 +80,9 @@ def validate_equity(equity: str) -> bool:
             ticker = yf.Ticker(candidate)
             hist = ticker.history(period="1d")
             if hist is not None and not hist.empty:
-                logger.info(f"Equity validation passed for: {candidate}")
                 equitywithsuffix = candidate
+                _ticker_validation_cache[symbol] = candidate  # Cache success
+                logger.info(f"Equity validation passed for: {candidate}")
                 return True
             else:
                 logger.warning(f"No historical data found for: {candidate}")

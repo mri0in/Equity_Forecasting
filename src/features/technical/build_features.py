@@ -1,65 +1,81 @@
+# src/features/technical/build_features.py
 import pandas as pd
-from features.technical.candle_features import CandleFeatureBuilder
-from features.technical.trend_features import TrendFeatureBuilder
-from features.technical.momentum_features import MomentumFeatureBuilder
-from features.technical.volume_features import VolumeFeatureBuilder
-from utils.logger import get_logger
+from src.features.technical.candle_features import CandleFeatures
+from src.features.technical.trend_features import TrendFeatures
+from src.features.technical.momentum_features import MomentumFeatures
+from src.features.technical.volume_features import VolumeFeatures
+from src.utils.cache_manager import CacheManager
+from src.utils.logger import get_logger
 
-# Initialize module-level logger
 logger = get_logger(__name__)
 
 class FeatureBuilder:
     """
-    Orchestrates the application of multiple technical feature engineering steps.
+    Orchestrates the application of multiple technical feature engineering steps
+    (Candlestick, Trend, Momentum, Volume) and caches results for efficiency.
     """
 
-    def __init__(self, sma_window: int = 10, ema_span: int = 10, roc_periods: int = 5, volume_rolling_window: int = 5):
+    def __init__(self, equity: str):
         """
-        Initializes all feature builders such as Candles, Momentum, Trends, Volume into one and with their corresponding configuration parameters.
-        
-        Args:
-            sma_window (int): Window size for Simple Moving Average
-            ema_span (int): Span size for Exponential Moving Average
-            roc_periods (int): Number of periods for Rate of Change
-            volume_rolling_window (int): Rolling window for volume features
-        """
-        
-        self.candle = CandleFeatureBuilder()
-        self.trend = TrendFeatureBuilder(sma_window, ema_span)
-        self.momentum = MomentumFeatureBuilder(roc_periods)
-        self.volume = VolumeFeatureBuilder(volume_rolling_window)
+        Initializes FeatureBuilder with OHLCV DataFrame and equity ticker.
 
+        Args:
+            equity (str): Equity ticker (used for cache keys)
+        """
+        self.equity = equity
+        self.cache_manager = CacheManager.get_instance()
+    
     def build_all(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Applies all feature engineering steps sequentially.
-
-        Args:
-            df (pd.DataFrame): Input stock price data
+        Sequentially applies all technical feature engineering steps.
+        Uses caching to avoid recomputation.
 
         Returns:
-            pd.DataFrame: Transformed DataFrame with all features added
+            pd.DataFrame: DataFrame with all features appended
         """
+        cache_key = f"features_{self.ticker}"
+        refresh_cache = False  # Set to True to force recomputation
+        ttl_seconds = 30 * 24 * 60 * 60  # 1 month
+
+        
+        # Check cache first
+        if not refresh_cache and self.cache_manager.exists(cache_key, module="features"):
+            cached_result = self.cache_manager.load(cache_key, module="features")
+            if cached_result is not None:
+                return cached_result
+
+        # Initialize feature submodules with current df
+        candle = CandleFeatures(df, self.equity)
+        trend = TrendFeatures(df, self.equity)
+        momentum = MomentumFeatures(df, self.equity)
+        volume = VolumeFeatures(df, self.equity)
+
         try:
-            logger.info("Starting candle features...")
-            df = self.candle.add_features(df)
-            logger.info("Candle features added.")
+            logger.info(f"Building candle features for {self.equity}...")
+            df_candle = candle.compute_all()
+            logger.info("Candle features built.")
 
-            logger.info("Starting trend features...")
-            df = self.trend.add_features(df)
-            logger.info("Trend features added.")
+            logger.info(f"Building trend features for {self.equity}...")
+            df_trend = trend.compute_all()
+            logger.info("Trend features built.")
 
-            logger.info("Starting momentum features...")
-            df = self.momentum.add_features(df)
-            logger.info("Momentum features added.")
+            logger.info(f"Building momentum features for {self.equity}...")
+            df_momentum = momentum.compute_all()
+            logger.info("Momentum features built.")
 
-            logger.info("Starting volume features...")
-            df = self.volume.add_features(df)
-            logger.info("Volume features added.")
+            logger.info(f"Building volume features for {self.equity}...")
+            df_volume = volume.compute_all()
+            logger.info("Volume features built.")
 
-            logger.info("All features built successfully.")
+            # Merge all features
+            df_all = pd.concat([df_candle, df_trend, df_momentum, df_volume], axis=1)
+
+            # Save final merged features to cache with expiry time(ttl) of 1 month
+            self.cache_manager.save(cache_key, df_all, module="features", ttl=ttl_seconds)
+            logger.info(f"All features built and cached successfully for {self.equity}.")
 
         except Exception as e:
-            logger.error(f"Feature building failed: {e}")
+            logger.error(f"Feature building failed for {self.equity}: {e}")
             raise
 
-        return df
+        return df_all

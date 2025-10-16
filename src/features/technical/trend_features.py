@@ -1,29 +1,55 @@
+# src/features/technical/trend_features.py
 import pandas as pd
+from typing import Literal
+from src.utils.logger import get_logger
 
-class TrendFeatureBuilder:
-    def __init__(self, sma_window: int = 10, ema_span: int = 10):
-        """
-        Initializes trend feature parameters.
-        
-        Args:
-            sma_window (int): Window size for Simple Moving Average (default 10)
-            ema_span (int): Span for Exponential Moving Average (default 10)
-        """
-        self.sma_window = sma_window
-        self.ema_span = ema_span
+logger = get_logger(__name__)
 
-    def add_features(self, df: pd.DataFrame) -> pd.DataFrame:
+class TrendFeatures:
+    """
+    Computes trend indicators: SMA, EMA, MACD, Bollinger Bands, etc.
+    """
+
+    def __init__(self, df: pd.DataFrame, equity: str):
         """
-        Adds trend-based technical indicators:
-        - sma: Simple Moving Average over sma_window periods
-        - ema: Exponential Moving Average over ema_span periods
-        
         Args:
-            df (pd.DataFrame): Stock price dataframe
-        
-        Returns:
-            pd.DataFrame: DataFrame with added trend features
+            df (pd.DataFrame): OHLCV DataFrame with 'Open', 'High', 'Low', 'Close', 'Volume'.
+            equity (str): Equity ticker.
         """
-        df[f"sma_{self.sma_window}"] = df["Close"].rolling(window=self.sma_window).mean()
-        df[f"ema_{self.ema_span}"] = df["Close"].ewm(span=self.ema_span, adjust=False).mean()
-        return df
+        self.df = df.copy()
+        self.equity = equity
+        
+
+    def sma(self, period: int = 14) -> pd.Series:
+        return self.df["Close"].rolling(period).mean()
+
+    def ema(self, period: int = 14) -> pd.Series:
+        return self.df["Close"].ewm(span=period, adjust=False).mean()
+
+    def macd(self, fast: int = 12, slow: int = 26, signal: int = 9) -> pd.DataFrame:
+        fast_ema = self.df["Close"].ewm(span=fast, adjust=False).mean()
+        slow_ema = self.df["Close"].ewm(span=slow, adjust=False).mean()
+        macd_line = fast_ema - slow_ema
+        signal_line = macd_line.ewm(span=signal, adjust=False).mean()
+        hist = macd_line - signal_line
+        return pd.DataFrame({"MACD": macd_line, "Signal": signal_line, "Hist": hist})
+
+    def bollinger_bands(self, period: int = 20, std: float = 2) -> pd.DataFrame:
+        sma = self.df["Close"].rolling(period).mean()
+        rstd = self.df["Close"].rolling(period).std()
+        upper = sma + std * rstd
+        lower = sma - std * rstd
+        return pd.DataFrame({"BB_upper": upper, "BB_lower": lower})
+
+    def compute_all(self) -> pd.DataFrame:
+        """
+        Computes all trend features and returns DataFrame.
+        Caches the result.
+        """
+        
+        df_trend = pd.DataFrame(index=self.df.index)
+        df_trend["SMA_14"] = self.sma(14)
+        df_trend["EMA_14"] = self.ema(14)
+        df_trend = pd.concat([df_trend, self.macd(), self.bollinger_bands()], axis=1)
+
+        return df_trend

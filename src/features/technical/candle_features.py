@@ -1,18 +1,34 @@
+# src/features/technical/candle_features.py
 import pandas as pd
+from src.utils.cache_manager import CacheManager
+from src.utils.logger import get_logger
 
-class CandleFeatureBuilder:
-    def add_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Adds candlestick-related features to the dataframe:
-        - open_close_diff: Difference between closing and opening price
-        - high_low_range: Daily price range
-        - candle_body: Absolute size of candle body
-        - upper_shadow: Wick above the body
-        - lower_shadow: Wick below the body
-        """
-        df["open_close_diff"] = df["Close"] - df["Open"]
-        df["high_low_range"] = df["High"] - df["Low"]
-        df["candle_body"] = (df["Close"] - df["Open"]).abs()
-        df["upper_shadow"] = df["High"] - df[["Open", "Close"]].max(axis=1)
-        df["lower_shadow"] = df[["Open", "Close"]].min(axis=1) - df["Low"]
-        return df
+logger = get_logger(__name__)
+
+class CandleFeatures:
+    """
+    Computes candlestick patterns: Doji, Hammer, Engulfing, etc.
+    """
+
+    def __init__(self, df: pd.DataFrame, equity: str):
+        self.df = df.copy()
+        self.equity = equity
+        
+
+    def is_doji(self, threshold: float = 0.1) -> pd.Series:
+        body = abs(self.df["Close"] - self.df["Open"])
+        return (body / self.df["Close"]) < threshold
+
+    def is_hammer(self) -> pd.Series:
+        body = abs(self.df["Close"] - self.df["Open"])
+        lower_shadow = self.df["Open"].where(self.df["Close"] > self.df["Open"], self.df["Close"]) - self.df["Low"]
+        upper_shadow = self.df["High"] - self.df["Close"].where(self.df["Close"] > self.df["Open"], self.df["Open"])
+        return (lower_shadow >= 2 * body) & (upper_shadow <= body)
+
+    def compute_all(self) -> pd.DataFrame:
+        
+        df_candle = pd.DataFrame(index=self.df.index)
+        df_candle["Doji"] = self.is_doji()
+        df_candle["Hammer"] = self.is_hammer()
+
+        return df_candle

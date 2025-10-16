@@ -1,0 +1,28 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "List Class Methods",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "${workspaceFolder}/.vscode/local_scripts/list_methods.py",
+                "${file}",
+                "${input:className}"
+            ],
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ],
+    
+    "inputs": [
+        {
+            "id": "className",
+            "type": "promptString",
+            "description": "Enter class name to list methods for"
+        }
+    ]
+}

@@ -4,6 +4,14 @@ datalake:
     processed: "datalake/data/processed/"
     features: "datalake/data/features/"
 
+  cache:
+    data_processor: "datalake/cache/data_processor"
+    sentiment: "datalake/cache/sentiment"
+    features: "datalake/cache/features"
+    models: "datalake/cache/models"
+    ensemble: "datalake/cache/ensemble"
+    forecasting: "datalake/cache/forecasting"
+    
   models:
     checkpoints: "datalake/models/checkpoints/"
     trained: "datalake/models/trained/"

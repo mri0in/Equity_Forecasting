@@ -8,6 +8,7 @@ from src.features.market_sentiment.feeds.web_feed import WebFeed
 from src.features.market_sentiment.processing.pre_processor import TextPreProcessor
 from src.features.market_sentiment.processing.extractor import Extractor
 from src.features.market_sentiment.sentiment.sentiment_model import SentimentModel
+from src.utils.cache_manager import CacheManager
 
 from typing import Dict, Any, List, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -148,7 +149,7 @@ class SentimentAggregator:
         return self.preprocessor.clean_text(text)  # type: ignore[attr-defined]
     
 
-    def SentimentRunner(self, feed_timeout: float = 15.0) -> Dict[str, Any]:
+    def SentimentRunner(self, feed_timeout: float = 15.0, refresh_cache: bool = False) -> Dict[str, Any]:
         """
         Execute the sentiment aggregation pipeline in parallel for all feeds.
 
@@ -158,6 +159,7 @@ class SentimentAggregator:
 
         Args:
         feed_timeout (float): Maximum time in seconds to wait per feed thread
+        refresh_cache (bool): If True, forces re-aggregation ignoring cached results
 
         Returns:
             Dict[str, Any]: Combined sentiment results containing:
@@ -166,6 +168,17 @@ class SentimentAggregator:
                 - overall_sentiment: aggregated equity sentiment score
         """
         feed_scores: Dict[str, float] = {}
+
+        cache_key = f"sentiment_{self.equity}"
+        cache_manager = CacheManager.get_instance()
+        # Check cache first
+        if not refresh_cache:
+            try:
+                cached_result = cache_manager.load(cache_key, module="sentiment")
+                logger.info(f"Sentiment cache hit for {self.equity}")
+                return cached_result
+            except FileNotFoundError:
+                logger.info(f"No cached sentiment found for {self.equity}, recomputing.")
 
         # Run each feed in parallel using ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=len(self.feeds)) as executor:
@@ -201,13 +214,20 @@ class SentimentAggregator:
         non_zero_scores = [s for s in feed_scores.values() if s != 0.0]
         overall_sentiment = median(non_zero_scores) if non_zero_scores else 0.0
 
+
         logger.info(
             f"{self.equity}: aggregated sentiment {overall_sentiment:.3f} "
             f"from {len(feed_scores)} feeds (backend={self.model_backend})"
         )
 
-        return {
+        result = {
             "equity": self.equity,
             "feed_scores": feed_scores,
             "overall_sentiment": overall_sentiment,
         }
+
+        #Cache the aggregated result
+        cache_manager.save(cache_key, result, module="sentiment")
+        logger.info(f"Sentiment cache updated for {self.equity}")
+
+        return result

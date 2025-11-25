@@ -75,7 +75,6 @@ def _try_load_prediction_artifact(equity: str) -> Optional[Dict[str, Any]]:
     """
     Load forecast artifact for the given equity.
 
-    NEW: Only joblib artifacts, aligned with orchestration output.
     """
 
     candidate_paths = [
@@ -151,8 +150,9 @@ def get_forecast_for_equity(
             logger.warning(f"Forced feature rebuild failed: {e}")
 
     # Step 2: run forecast pipeline using NEW orchestration
+    forecast = None
     try:
-        orchestrator.run_forecast_pipeline(
+       forecast = orchestrator.run_forecast_pipeline(
             equity=equity,
             horizon=horizon,
             allow_training=allow_training,
@@ -160,7 +160,13 @@ def get_forecast_for_equity(
     except Exception as e:
         logger.error(f"orchestrator.run_forecast_pipeline failed: {e}")
 
-    # Step 3: load artifact
+    
+    # If orchestrator returned a forecast dict → USE IT
+    if isinstance(forecast, dict):
+        logger.info("Using orchestrator-produced forecast (no reload needed).")
+        return forecast    
+
+    # Step 3: load artifact from disk (fallback)
     artifact = _try_load_prediction_artifact(equity)
 
     if artifact is not None:

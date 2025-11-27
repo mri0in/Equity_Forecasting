@@ -1,4 +1,4 @@
-# src/monitor/monitor.py
+# src/monitoring/monitor.py
 """
 Training monitor module.
 
@@ -261,6 +261,58 @@ class TrainingMonitor:
             self.events.append(event)
             self._append_jsonl(event)
             logger.info(f"Monitor event logged: {name}")
+
+
+    # -------------------------
+    # Stage-level lifecycle logging
+    # -------------------------
+    def log_stage_start(self, stage_name: str, payload: Optional[Dict[str, Any]] = None) -> None:
+        """
+        Log the start of a logical stage in the pipeline.
+        Example stages: 'data_preprocessing', 'feature_engineering', 
+        'training', 'walkforward', 'forecasting', 'postprocessing'.
+
+        Parameters
+        ----------
+        stage_name : str
+            Name of the stage.
+        payload : dict | None
+            Additional metadata for the stage start event.
+        """
+        event = {
+            "event": "stage_start",
+            "stage": stage_name,
+            "payload": payload or {},
+            "timestamp": _utcnow_iso(),
+        }
+        with self._lock:
+            self.events.append(event)
+            self._append_jsonl(event)
+        logger.info(f"[MONITOR] Stage START: {stage_name}")
+
+    def log_stage_end(self, stage_name: str, payload: Optional[Dict[str, Any]] = None) -> None:
+        """
+        Log the end of a logical stage in the pipeline.
+
+        Parameters
+        ----------
+        stage_name : str
+            Name of the stage.
+        payload : dict | None
+            Additional metadata containing final stats.
+        """
+        event = {
+            "event": "stage_end",
+            "stage": stage_name,
+            "payload": payload or {},
+            "timestamp": _utcnow_iso(),
+        }
+        with self._lock:
+            self.events.append(event)
+            self._append_jsonl(event)
+        logger.info(f"[MONITOR] Stage END: {stage_name}")
+
+
 
     # -------------------------
     # Finalize & plotting

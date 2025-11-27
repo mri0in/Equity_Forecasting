@@ -3,14 +3,10 @@
 API wrapper used by the dashboard (ForecastPanel) to request a forecast
 for a single equity.
 
-Now aligned with the NEW orchestration design:
+Uses the new Orchestrator:
+    orchestrator.run_forecast_pipeline(equity, horizon, ...)
 
-    - Calls: orchestrator.run_forecast_pipeline(equity, horizon, ...)
-    - Expects orchestrator to write canonical artifacts at:
-
-        datalake/predictions/{equity}_forecast.joblib
-
-If no artifact is found, returns a simulated forecast to keep UI responsive.
+If no prediction artifact exists, returns a simulated forecast to keep UI responsive.
 """
 
 import os
@@ -23,17 +19,20 @@ import numpy as np
 import pandas as pd
 
 from src.pipeline.orchestrator import PipelineOrchestrator
+from src.monitoring.monitor import TrainingMonitor
+
+monitor = TrainingMonitor()
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
 # -------------------------------------------------------------------------
-# SIMULATION FALLBACK
+# SIMULATION FALLBACK (UI-compatible)
 # -------------------------------------------------------------------------
 def _simulated_forecast(equity: str, horizon: int) -> Dict[str, Any]:
     """
-    Generate fallback simulated forecast (UI-compatible structure).
+    Return a simulated fallback forecast when no prediction artifact exists.
     """
     np.random.seed(abs(hash(equity)) % (2**32))
 
@@ -73,8 +72,7 @@ def _simulated_forecast(equity: str, horizon: int) -> Dict[str, Any]:
 # -------------------------------------------------------------------------
 def _try_load_prediction_artifact(equity: str) -> Optional[Dict[str, Any]]:
     """
-    Load forecast artifact for the given equity.
-
+    Try to load prediction artifacts stored by the orchestrator.
     """
 
     candidate_paths = [
@@ -85,39 +83,39 @@ def _try_load_prediction_artifact(equity: str) -> Optional[Dict[str, Any]]:
     ]
 
     for path in candidate_paths:
-        if os.path.exists(path):
-            try:
-                logger.info(f"Loading prediction artifact for {equity} from {path}")
-                obj = joblib.load(path)
+        if not os.path.exists(path):
+            continue
 
-                # If canonical dict, return directly
-                if isinstance(obj, dict):
-                    return obj
+        try:
+            logger.info(f"Loading prediction artifact for {equity} from {path}")
+            obj = joblib.load(path)
 
-                # Minimal wrapper for list/numpy
-                if isinstance(obj, (list, tuple, np.ndarray)):
-                    preds = list(obj)
-                    return {
-                        "equity": equity,
-                        "forecast_mean": preds,
-                        "forecast_prices": preds,
-                        "metadata": {"source": path},
-                    }
+            # If dict → return as-is (canonical format)
+            if isinstance(obj, dict):
+                return obj
 
-                # Unknown type fallback
+            # List/array fallback
+            if isinstance(obj, (list, tuple, np.ndarray)):
+                preds = list(obj)
                 return {
                     "equity": equity,
-                    "prediction": obj,
+                    "forecast_mean": preds,
+                    "forecast_prices": preds,
                     "metadata": {"source": path},
                 }
 
-            except Exception as e:
-                logger.error(f"Artifact load failed for {equity} from {path}: {e}")
-                continue
+            # Unknown object → wrap it
+            return {
+                "equity": equity,
+                "prediction": obj,
+                "metadata": {"source": path},
+            }
+
+        except Exception as e:
+            logger.error(f"Artifact load failed for {equity} from {path}: {e}")
+            continue
 
     return None
-
-
 
 
 # -------------------------------------------------------------------------
@@ -131,28 +129,37 @@ def get_forecast_for_equity(
     allow_training: bool = False,
 ) -> Dict[str, Any]:
     """
-    Main forecast entrypoint for dashboard/UI.
+    Main forecast entrypoint used by the dashboard/UI.
 
-    NOW uses the new orchestrator.run_forecast_pipeline().
+    Calls orchestrator.run_forecast_pipeline(), which handles:
+        - feature preparation
+        - prediction task
+        - artifact generation & normalization
     """
 
     equity = equity.upper().strip()
     logger.info(f"Forecast request: equity={equity}, horizon={horizon}")
 
+    monitor.log_stage_start("Forecast Request", {"equity": equity, "horizon": horizon})
+
     orchestrator = PipelineOrchestrator(config_path)
 
-    # Step 1: optional forced feature rebuild
+    # ------------------------------------------------------
+    # (1) Optionally force rebuild of cached features
+    # ------------------------------------------------------
     if force_rebuild_features:
+        logger.info(f"Forcing feature rebuild for {equity}")
         try:
-            logger.info(f"Forcing feature rebuild for {equity}")
             orchestrator.prepare_features(equity)
         except Exception as e:
             logger.warning(f"Forced feature rebuild failed: {e}")
 
-    # Step 2: run forecast pipeline using NEW orchestration
+    # ------------------------------------------------------
+    # (2) Run the orchestrator forecast pipeline
+    # ------------------------------------------------------
     forecast = None
     try:
-       forecast = orchestrator.run_forecast_pipeline(
+        forecast = orchestrator.run_forecast_pipeline(
             equity=equity,
             horizon=horizon,
             allow_training=allow_training,
@@ -160,24 +167,25 @@ def get_forecast_for_equity(
     except Exception as e:
         logger.error(f"orchestrator.run_forecast_pipeline failed: {e}")
 
-    
-    # If orchestrator returned a forecast dict → USE IT
+    # If orchestrator already returned a usable forecast → we’re done
     if isinstance(forecast, dict):
-        logger.info("Using orchestrator-produced forecast (no reload needed).")
-        return forecast    
+        monitor.log_stage_end("Forecast Request", {"status": "orchestrator"})
+        return forecast
 
-    # Step 3: load artifact from disk (fallback)
+    # ------------------------------------------------------
+    # (3) Fallback: load artifact directly from disk
+    # ------------------------------------------------------
     artifact = _try_load_prediction_artifact(equity)
 
     if artifact is not None:
-        logger.info(f"Artifact found for {equity}, normalizing output.")
+        logger.info(f"Artifact found for {equity}, normalizing")
 
         result: Dict[str, Any] = {
             "equity": artifact.get("equity", equity),
             "metadata": artifact.get("metadata", {}),
         }
 
-        # Forecast values
+        # Numeric components
         if "forecast_mean" in artifact:
             result["forecast_mean"] = artifact["forecast_mean"]
             result["forecast_prices"] = artifact.get(
@@ -189,12 +197,13 @@ def get_forecast_for_equity(
         if "forecast_lower" in artifact:
             result["forecast_lower"] = artifact["forecast_lower"]
 
-        # Dates
+        # Historical data
         if "hist_dates" in artifact:
             result["hist_dates"] = artifact["hist_dates"]
         if "hist_prices" in artifact:
             result["hist_prices"] = artifact["hist_prices"]
 
+        # Forecast dates
         if "forecast_dates" in artifact:
             result["forecast_dates"] = artifact["forecast_dates"]
         else:
@@ -203,15 +212,21 @@ def get_forecast_for_equity(
                 today + pd.to_timedelta(range(1, horizon + 1), unit="D")
             ).astype(str).tolist()
 
-        # Ensure metadata
+        # Metadata timestamp
         result["metadata"].setdefault(
             "generated_at",
             datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         )
 
+        monitor.log_stage_end("Forecast Request", {"status": "artifact"})
         return result
 
-    # Step 4: fallback simulation
+    # ------------------------------------------------------
+    # (4) FINAL FALLBACK: simulated forecast
+    # ------------------------------------------------------
     logger.warning(f"No artifact found for {equity}; returning simulated forecast")
-    return _simulated_forecast(equity, horizon)
 
+    sim = _simulated_forecast(equity, horizon)
+
+    monitor.log_stage_end("Forecast Request", {"status": "simulated"})
+    return sim

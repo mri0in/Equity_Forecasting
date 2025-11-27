@@ -1,8 +1,11 @@
+# src/training/optimizers/early_stopping.py
+
 import os
 import numpy as np
 import torch
 from typing import Optional
 from src.utils.logger import get_logger
+from src.monitoring.monitor import log_stage_start, log_stage_end
 
 logger = get_logger(__name__)
 
@@ -47,30 +50,32 @@ class EarlyStopping:
         self.best_loss = np.inf
         self.early_stop = False
 
-    def __call__(self, val_loss: float, model: torch.nn.Module) -> None:
+    def __call__(self, val_loss: float, model: torch.nn.Module, epoch: Optional[int] = None) -> None:
         """
         Check whether validation loss improved; if not, increment counter.
 
         Args:
             val_loss (float): Current epoch's validation loss.
             model (torch.nn.Module): The PyTorch model to checkpoint if improved.
+            epoch (int, optional): Current epoch number for monitoring.
         """
+        stage_name = f"early_stopping_epoch_{epoch}" if epoch is not None else "early_stopping"
+        log_stage_start(stage_name, details={"val_loss": val_loss, "best_loss": self.best_loss, "counter": self.counter})
+
         if val_loss < self.best_loss - self.delta:
             self.best_loss = val_loss
             self._save_checkpoint(model)
             self.counter = 0
             if self.verbose:
                 logger.info(f"Validation loss improved to {val_loss:.6f}. Model checkpoint saved.")
+            log_stage_end(stage_name, metrics={"val_loss": val_loss, "improved": True})
         else:
             self.counter += 1
-            logger.info(
-                f"No improvement in validation loss. Counter: {self.counter}/{self.patience}."
-            )
+            logger.info(f"No improvement in validation loss. Counter: {self.counter}/{self.patience}.")
             if self.counter >= self.patience:
                 self.early_stop = True
-                logger.info(
-                    f"Early stopping triggered after {self.counter} consecutive non-improving epochs."
-                )
+                logger.info(f"Early stopping triggered after {self.counter} consecutive non-improving epochs.")
+            log_stage_end(stage_name, metrics={"val_loss": val_loss, "improved": False, "early_stop": self.early_stop})
 
     def _save_checkpoint(self, model: torch.nn.Module) -> None:
         """
@@ -87,4 +92,3 @@ class EarlyStopping:
 
         torch.save(model.state_dict(), self.checkpoint_path)
         logger.debug(f"Model checkpoint saved at: {self.checkpoint_path}")
-

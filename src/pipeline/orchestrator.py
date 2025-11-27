@@ -25,6 +25,9 @@ from src.pipeline import (
 )
 from src.utils.config_loader import load_typed_config, FullConfig
 
+from src.monitoring.monitor import TrainingMonitor
+monitor = TrainingMonitor()
+
 # -------------------------------
 # Completion markers for each pipeline task
 # -------------------------------
@@ -82,6 +85,8 @@ class PipelineOrchestrator:
 
         # If we reach here we need to build features.
         self.logger.info(f"No cached features found for {ticker}. Attempting to build features...")
+        monitor.log_event("Preparing features", {"equity": ticker})
+
 
         # Try to use the project's FeatureBuilder if available.
         # Since different FeatureBuilder implementations exist in repo variants,
@@ -131,11 +136,11 @@ class PipelineOrchestrator:
     # -----------------------------------------------------
     # Core Pipeline Task Runner
     # -----------------------------------------------------
+
     def run_task(self, task: str, retries: int = 1, strict: bool = True) -> None:
-        """
-        Run a single pipeline task with retries and strictness handling.
-        """
         marker = TASK_MARKERS.get(task)
+
+        # Already completed? No need to monitor.
         if marker and os.path.exists(marker):
             self.logger.info(f"Skipping task '{task}' — completion marker exists: {marker}")
             return
@@ -145,6 +150,9 @@ class PipelineOrchestrator:
             try:
                 self.logger.info(f"Running task: {task} (attempt {attempt + 1}/{retries})")
 
+                # MONITORING: task start
+                monitor.log_stage_start(task, {"attempt": attempt + 1})
+
                 if task == "train":
                     run_training(self.config_path)
                 elif task == "optimize":
@@ -152,23 +160,35 @@ class PipelineOrchestrator:
                 elif task == "ensemble":
                     run_ensemble(self.config_path)
                 elif task == "predict":
-                    # run_prediction is expected to handle prediction job across cached features
                     run_prediction(self.config_path)
                 elif task == "walkforward":
                     run_walk_forward(self.config_path)
                 else:
                     self.logger.warning(f"Unknown task '{task}' — skipping")
 
-                return  # success → exit
+                # MONITORING: task end
+                monitor.log_stage_end(task, {"status": "success"})
+                return
+
             except Exception as e:
                 attempt += 1
                 self.logger.error(f"Task '{task}' failed on attempt {attempt}/{retries}: {e}")
+
+                # MONITORING: task error
+                monitor.error(task, str(e), {"attempt": attempt})
+
                 if attempt >= retries:
                     if strict:
                         self.logger.critical(f"Task '{task}' failed after {retries} attempts. Aborting.")
+
+                        # MONITORING: final fail end
+                        monitor.log_stage_end(task, {"status": "failed"})
                         raise
                     else:
                         self.logger.warning(f"Skipping failed task '{task}' (strict={strict})")
+
+                        # MONITORING: soft fail but still end
+                        monitor.log_stage_end(task, {"status": "skipped"})
                         return
 
     # -----------------------------------------------------
@@ -260,7 +280,10 @@ class PipelineOrchestrator:
             Optional[Dict[str, Any]]: forecast dict or None
         """
         equity = equity.upper().strip()
+
         self.logger.info(f"run_forecast_pipeline start: equity={equity}, horizon={horizon}")
+        monitor.log_stage_start("forecast_pipeline", {"equity": equity})
+
 
         # 1. Ensure features available
         feature_path = self.prepare_features(equity)
@@ -314,6 +337,8 @@ class PipelineOrchestrator:
                 artifact["forecast_mean"] = list(artifact["prediction"])
             except Exception:
                 artifact["forecast_mean"] = [artifact["prediction"]]
+
+        monitor.log_stage_end("forecast_pipeline", {"equity": equity})
         return artifact
 
     # -----------------------------------------------------

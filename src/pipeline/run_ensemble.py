@@ -1,34 +1,23 @@
+# src/pipeline/run_ensemble.py
+
 """
 This module handles the orchestration of ensemble modeling.
 It loads base model predictions, applies an ensemble strategy,
 evaluates the final ensemble prediction, and logs the results.
 
-⚠️ IMPORTANT WARNING FOR USERS & DEVELOPERS
-# For orchestration and end-user workflows, DO NOT call these classes
-# directly. Instead, always use the wrapper functions in:
-#
-#     src/pipeline/pipeline_wrapper.py
-#
-# Example:
-#     from src.pipeline.pipeline_wrapper import run_ensemble
-#     run_ensemble("configs/ensemble_config.yaml")
-#
-# Reason:
-# The wrappers provide a consistent interface for the orchestrator and enforce
-# config-driven execution across the project. Direct class calls may bypass
-# orchestration safeguards (retries, logging, markers).
-# -------
+⚠️ IMPORTANT WARNING:
+Do NOT call these functions/classes directly. Use the wrapper functions
+in src/pipeline/pipeline_wrapper.py to enforce orchestration, logging,
+retries, and task markers.
 """
-
-# src/pipeline/run_ensemble.py
 
 import os
 from typing import Dict, List
-
 import numpy as np
 import yaml
 
 from src.utils.logger import get_logger
+from src.monitoring.monitor import TrainingMonitor
 from src.ensemble.simple_ensembler import SimpleEnsembler
 from src.ensemble.generate_oof import OOFGenerator
 from src.ensemble.meta_features import MetaFeaturesBuilder
@@ -36,19 +25,24 @@ from src.ensemble.train_meta_features import MetaFeatureTrainer
 from src.training.evaluate import compute_metrics
 
 logger = get_logger(__name__)
+monitor = TrainingMonitor()
 
 
 def load_ensemble_config(config_path: str) -> Dict:
     """Load ensemble configuration from a YAML file."""
+    monitor.log_stage_start("load_ensemble_config", {"config_path": config_path})
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
     logger.info("Loaded ensemble config from %s", config_path)
+    monitor.log_stage_end("load_ensemble_config", {"status": "success"})
     return config
 
 
 def _load_pred_arrays(paths: List[str]) -> List[np.ndarray]:
+    monitor.log_stage_start("load_pred_arrays", {"num_paths": len(paths)})
     preds = [np.load(p) for p in paths]
     logger.info("Loaded %d prediction arrays", len(preds))
+    monitor.log_stage_end("load_pred_arrays", {"status": "success"})
     return preds
 
 
@@ -57,6 +51,7 @@ def run_ensemble(config: Dict) -> Dict[str, float]:
     Run the selected ensemble strategy based on config.
     Returns a dict of evaluation metrics.
     """
+    monitor.log_stage_start("run_ensemble", {"method": config.get("ensemble", {}).get("method", None)})
     ensemble_cfg = config.get("ensemble", {})
     method = ensemble_cfg.get("method", "mean").lower()
     logger.info("Running ensemble method: %s", method)
@@ -73,6 +68,7 @@ def run_ensemble(config: Dict) -> Dict[str, float]:
         preds = _load_pred_arrays(pred_paths)
         ensembler = SimpleEnsembler(predictions=preds)
 
+        monitor.log_stage_start("ensemble_predictions", {"method": method})
         if method == "weighted":
             weights: List[float] = ensemble_cfg["weights"]
             y_pred = ensembler.ensemble_predictions(method="weighted", weights=weights)
@@ -80,14 +76,17 @@ def run_ensemble(config: Dict) -> Dict[str, float]:
             y_pred = ensembler.ensemble_predictions(method="median")
         else:  # mean
             y_pred = ensembler.ensemble_predictions(method="mean")
+        monitor.log_stage_end("ensemble_predictions", {"status": "success"})
 
         y_true = np.load(y_true_path)
         results = compute_metrics(y_true, y_pred, metrics)
         logger.info("%s ensemble evaluation: %s", method.capitalize(), results)
+        monitor.log_stage_end("run_ensemble", {"status": "completed"})
         return results
 
     # ---------- Stacked (OOF -> Meta Features -> Meta Model) ----------
     elif method == "stacked":
+        monitor.log_stage_start("stacked_ensemble_pipeline")
         oof_cfg = ensemble_cfg.get("oof", {})
         X_path: str = oof_cfg["X_path"]
         y_path: str = oof_cfg["y_path"]
@@ -100,7 +99,7 @@ def run_ensemble(config: Dict) -> Dict[str, float]:
         X, y = gen.load_data(X_path, y_path)
         oof_preds, oof_targets = gen.generate(X, y)
 
-        # Persist OOF arrays for MetaFeaturesBuilder (expects file paths)
+        # Persist OOF arrays for MetaFeaturesBuilder
         os.makedirs(oof_out_dir, exist_ok=True)
         oof_preds_path = os.path.join(oof_out_dir, "oof_preds.npy")
         oof_targets_path = os.path.join(oof_out_dir, "oof_targets.npy")
@@ -118,14 +117,16 @@ def run_ensemble(config: Dict) -> Dict[str, float]:
             oof_targets_path=oof_targets_path,
             feature_paths=feature_paths,
         )
+        monitor.log_stage_start("build_meta_features")
         _ = mf_builder.build(save_path=meta_csv_path)
+        monitor.log_stage_end("build_meta_features", {"status": "success"})
 
         # Train/evaluate meta model
         mm_cfg = ensemble_cfg.get("meta_model", {})
         model_save_path: str = mm_cfg.get("save_path", "datalake/ensemble/meta/meta_model.pkl")
         test_size: float = mm_cfg.get("test_size", 0.2)
         random_state: int = mm_cfg.get("random_state", 42)
-        model_hparams: Dict = mm_cfg.get("params", None)  # optional dict for LightGBM
+        model_hparams: Dict = mm_cfg.get("params", None)  # optional dict
 
         trainer = MetaFeatureTrainer(
             data_path=meta_csv_path,
@@ -134,14 +135,19 @@ def run_ensemble(config: Dict) -> Dict[str, float]:
             model_params=model_hparams,
         )
 
+        monitor.log_stage_start("train_meta_model")
         X_train, y_train, X_val, y_val = trainer.prepare_datasets()
         trainer.train_model(X_train, y_train, X_val, y_val)
         results = trainer.evaluate(X_val, y_val)
         trainer.save_model(model_save_path)
+        monitor.log_stage_end("train_meta_model", {"status": "success"})
 
         logger.info("Stacked ensemble evaluation: %s", results)
+        monitor.log_stage_end("stacked_ensemble_pipeline", {"status": "completed"})
+        monitor.log_stage_end("run_ensemble", {"status": "completed"})
         return results
 
     else:
         logger.error("Unsupported ensemble method: %s", method)
+        monitor.log_stage_end("run_ensemble", {"status": "failed"})
         raise ValueError(f"Unsupported ensemble method: {method}")

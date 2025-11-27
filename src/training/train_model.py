@@ -1,22 +1,34 @@
+# src/models/train_model.py
+"""
+train_model.py
+
+Handles the training pipeline for equity forecasting models.
+Integrates monitoring and logging for each stage.
+
+Responsibilities:
+- Load YAML config
+- Load training/validation data
+- Dynamically import and initialize model
+- Train the model with optional early stopping
+- Save the trained model
+- Report all stages to TrainingMonitor
+"""
+
 import importlib
 import yaml
 import numpy as np
-from typing import Tuple, Type
+from typing import Tuple, Type, Optional
 
 from src.utils.logger import get_logger
+from src.monitoring.monitor import TrainingMonitor
 
 logger = get_logger(__name__)
+monitor = TrainingMonitor()
+
 
 class ModelTrainer:
     """
     Encapsulates the training process of an equity forecasting model.
-
-    Responsibilities:
-    - Load config from YAML
-    - Load training and optional validation data
-    - Dynamically import and initialize specified model
-    - Train the model (supports early stopping if enabled)
-    - Save the trained model
     """
 
     def __init__(self, config_path: str):
@@ -39,28 +51,26 @@ class ModelTrainer:
         Returns:
             dict: Parsed config
         """
+        monitor.log_stage_start("load_config", {"config_path": path})
         with open(path, "r") as f:
             config = yaml.safe_load(f)
             logger.info("Loaded config from %s", path)
-            return config
+        monitor.log_stage_end("load_config")
+        return config
 
-    def load_data(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    def load_data(self) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray], Optional[np.ndarray]]:
         """
         Load training and optional validation data from disk.
-
-        Config format under 'data':
-          X_train_path, y_train_path
-          X_val_path, y_val_path (optional if early stopping disabled)
 
         Returns:
             Tuple of X_train, y_train, X_val, y_val (val may be None if not used)
         """
+        monitor.log_stage_start("load_data")
         data_cfg = self.config["data"]
 
         X_train = np.load(data_cfg["X_train_path"])
         y_train = np.load(data_cfg["y_train_path"])
 
-        # Default to None if not using early stopping
         X_val = y_val = None
         early_stopping = self.config.get("model", {}).get("params", {}).get("early_stopping", {}).get("enabled", False)
 
@@ -74,6 +84,7 @@ class ModelTrainer:
                 raise e
 
         logger.info(f"Loaded training data X_train:{X_train.shape}, y_train:{y_train.shape}")
+        monitor.log_stage_end("load_data")
         return X_train, y_train, X_val, y_val
 
     def _initialize_model(self):
@@ -83,6 +94,7 @@ class ModelTrainer:
         Returns:
             Instantiated model object
         """
+        monitor.log_stage_start("initialize_model")
         model_info = self.config["model"]
         module_path = model_info["module"]
         class_name = model_info["class"]
@@ -92,17 +104,20 @@ class ModelTrainer:
         model_class: Type = getattr(module, class_name)
 
         logger.info(f"Instantiated model {class_name} from {module_path}")
+        monitor.log_stage_end("initialize_model")
         return model_class(params)
 
     def train_and_save(self):
         """
         Orchestrates full training and saving pipeline.
         """
+        monitor.log_stage_start("train_and_save")
         X, y, X_val, y_val = self.load_data()
         self.model.train(X, y, X_val, y_val)
         save_path = self.config["training"]["save_path"]
         self.model.save(save_path)
         logger.info(f"Model saved to {save_path}")
+        monitor.log_stage_end("train_and_save")
 
 
 def run_training(config_path: str):
@@ -112,5 +127,7 @@ def run_training(config_path: str):
     Args:
         config_path (str): Path to YAML config
     """
+    monitor.log_stage_start("run_training", {"config_path": config_path})
     trainer = ModelTrainer(config_path)
     trainer.train_and_save()
+    monitor.log_stage_end("run_training")

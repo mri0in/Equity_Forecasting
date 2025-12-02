@@ -8,6 +8,7 @@ Each stage now logs start/end events and captures metrics or errors.
 """
 
 from typing import Optional
+from src.pipeline.run_ingestion import IngestionPipeline
 from src.pipeline.run_training import ModelTrainerPipeline
 from src.pipeline.run_optimizer import run_hyperparameter_optimization
 from src.pipeline.run_ensemble import run_ensemble, load_ensemble_config
@@ -18,6 +19,21 @@ from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+def run_ingestion(tickers: list, start_date: str = "2013-01-01", end_date: str = None) -> None:
+    """
+    Wrapper for ingestion stage with monitoring/logging.
+    """
+    stage_name = "ingestion_pipeline"
+    log_stage_start(stage_name, details={"tickers": tickers})
+
+    try:
+        pipeline = IngestionPipeline(tickers, start_date, end_date)
+        pipeline.run()
+
+        log_stage_end(stage_name, metrics={"status": "completed"})
+    except Exception as e:
+        log_stage_end(stage_name, metrics={"status": "failed", "error": str(e)})
+        raise
 
 def run_training(config_path: str) -> None:
     """Wrapper for training stage with monitoring."""

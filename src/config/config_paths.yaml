@@ -1,37 +1,70 @@
+# src/config/config_paths.yaml
+# ----------------------------
+# Centralized paths for the Equity Forecasting Project
+# Organized by type: raw data, processed data, features, cache, models, predictions, metadata, logs, evaluation, experiments
+# Designed to support end-to-end pipeline including DAG orchestration, global model training, and equity-specific forecasts.
+
 datalake:
+  # ----------------------------
+  # Core Data Paths
+  # ----------------------------
   data:
     raw: "datalake/data/raw/"
     processed: "datalake/data/processed/"
     features: "datalake/data/features/"
 
+  # ----------------------------
+  # Cache for intermediate results
+  # ----------------------------
   cache:
-    data_processor: "datalake/cache/data_processor"
-    sentiment: "datalake/cache/sentiment"
-    features: "datalake/cache/features"
-    models: "datalake/cache/models"
-    ensemble: "datalake/cache/ensemble"
-    forecasting: "datalake/cache/forecasting"
-    
+    data_processor: "datalake/cache/data_processor/"
+    sentiment: "datalake/cache/sentiment/"
+    features: "datalake/cache/features/"
+    models: "datalake/cache/models/"
+    ensemble: "datalake/cache/ensemble/"
+    forecasting: "datalake/cache/forecasting/"
+    pipeline_state: "datalake/cache/pipeline_state/"
+
+  # ----------------------------
+  # Permanent Model Storage
+  # ----------------------------
   models:
     checkpoints: "datalake/models/checkpoints/"
     trained: "datalake/models/trained/"
+    global_model_dir: "datalake/models/trained/global/"
 
+  # ----------------------------
+  # Predictions / Inference outputs
+  # ----------------------------
   predictions:
     test: "datalake/predictions/test/"
     validation: "datalake/predictions/validation/"
+    production: "datalake/predictions/production/"
 
+  # ----------------------------
+  # Metadata
+  # ----------------------------
   metadata:
     schema: "datalake/metadata/schema/"
     stats: "datalake/metadata/stats/"
 
+  # ----------------------------
+  # Logs
+  # ----------------------------
   logs:
     training: "datalake/logs/train.log"
     inference: "datalake/logs/inference.log"
 
+  # ----------------------------
+  # Evaluation Outputs
+  # ----------------------------
   evaluation:
     metrics: "datalake/evaluation/metrics/"
     reports: "datalake/evaluation/reports/"
 
+  # ----------------------------
+  # Experiments / Hyperparameter Tuning
+  # ----------------------------
   experiments:
     optuna_trials: "datalake/experiments/optuna/"
     wandb_runs: "datalake/experiments/wandb/"

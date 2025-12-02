@@ -1,10 +1,14 @@
-# Stores core training/model hyperparameters and references paths (usually relative) for data and saving models.
+# src/config/config.yaml
+# ----------------------------
+# Core configuration for Equity Forecasting Project
+# Includes data paths, model parameters, training settings, early stopping, walk-forward validation,
+# pipeline orchestration, and experiment tracking.
+# Designed for reuse across CPU/GPU/Colab environments and for both global and equity-specific models.
 
 # ----------------------------
 # Section: Data Paths
 # ----------------------------
 data:
-  # Paths for datasets
   raw_data_dir: "datalake/data/raw/"
   processed_data_dir: "datalake/data/processed/"
   features_data_dir: "datalake/data/features/"
@@ -13,24 +17,26 @@ data:
 # Section: Model Paths
 # ----------------------------
 model:
-  # Checkpoints directory for intermediate saved models during training
+  # Directory for intermediate checkpoints during training
   checkpoints_dir: "datalake/models/checkpoints/"
   
-  # Final trained model directory
+  # Directory for final trained models
   trained_model_dir: "datalake/models/trained/"
   
-  # Final trained model filename
-  trained_model_file: "lstm_model.pt"
+  # Default trained model filename pattern
+  # Supports dynamic naming: {model_type}_{num_equities}_{MMDD}.pth
+  trained_model_file_pattern: "lstm_global_{num_equities}eqt_{MMDD}.pth"
+  
+  # Directory to save global models separately for easy reference
+  global_model_dir: "datalake/models/trained/global/"
 
 # ----------------------------
 # Section: Predictions
 # ----------------------------
 predictions:
-  # Where to save test predictions
   test_dir: "datalake/predictions/test/"
-  
-  # Where to save validation predictions
   validation_dir: "datalake/predictions/validation/"
+  production_dir: "datalake/predictions/production/"
 
 # ----------------------------
 # Section: Metadata
@@ -40,7 +46,7 @@ metadata:
   stats_dir: "datalake/metadata/stats/"
 
 # ----------------------------
-# Section: Logs
+# Section: Logging
 # ----------------------------
 logging:
   train_log_file: "datalake/logs/train.log"
@@ -55,7 +61,7 @@ evaluation:
   reports_dir: "datalake/evaluation/reports/"
 
 # ----------------------------
-# Section: Experiments
+# Section: Experiments / Hyperparameter Optimization
 # ----------------------------
 experiments:
   optuna_trials_dir: "datalake/experiments/optuna/"
@@ -65,36 +71,37 @@ experiments:
 # Section: Model Parameters
 # ----------------------------
 model_params:
-  input_size: 10
-  hidden_size: 64
-  num_layers: 2
-  output_size: 1
+  input_size: 10         # Number of input features per time step
+  hidden_size: 64        # LSTM hidden layer size
+  num_layers: 2          # Number of LSTM layers
+  output_size: 1         # Single-step forecast
   dropout: 0.3
   learning_rate: 0.001
   batch_size: 32
   num_epochs: 100
-  device: "cuda"  # or "cpu"
+  device: "cpu"          # "cuda"  or "cpu"
 
 # ----------------------------
 # Section: Early Stopping
 # ----------------------------
 early_stopping:
+  enabled: true
   patience: 10
   delta: 0.0001
   checkpoint_file: "datalake/models/checkpoints/best_model.pt"
 
 # ----------------------------
-# Section: Walk-Forward Validation
+# Section: Walk-Forward Validation (WFV)
 # ----------------------------
 walk_forward:
-  enabled: true                        # Whether to activate WFV
+  enabled: true                        # Enable/disable WFV
   n_splits: 5                          # Number of rolling splits
-  test_size_days: 30                  # Test window size in days
-  step_size_days: 15                  # Shift size between folds
-  overlap: false                       # Allow overlapping test windows
-  save_dir: "datalake/wfv/models/"     # Where to save models from each fold
-  metrics: ["mape", "rmse", "r2"]      # Metrics to evaluate on each fold
-  evaluation_output: "datalake/wfv/reports/wfv_summary.json"  # Aggregated report output
+  test_size_days: 30                    # Days in each test fold
+  step_size_days: 15                    # Shift size between folds
+  overlap: false                        # Allow overlapping test windows
+  save_dir: "datalake/wfv/models/"      # Save models from each fold
+  metrics: ["mape", "rmse", "r2"]       # Metrics to evaluate each fold
+  evaluation_output: "datalake/wfv/reports/wfv_summary.json"  # Aggregated summary
   oof_predictions_dir: "datalake/wfv/oof_predictions/"         # Optional: store out-of-fold predictions
 
 # ----------------------------
@@ -102,11 +109,13 @@ walk_forward:
 # ----------------------------
 pipeline:
   tasks:
-    - train
-    - optimize
-    - ensemble
-    - predict
+    - ingestion
+    - preprocessing
+    - feature_generation
+    - training
+    - optimization
     - walkforward
-  retries: 2        # how many times to retry a failing task
-  strict: true      # if true → fail fast, if false → skip failed task and continue
-  
+    - ensembling
+    - forecasting
+  retries: 2         # Retry limit for failing task
+  strict: true       # Fail-fast if true, skip failures if false

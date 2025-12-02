@@ -5,7 +5,7 @@ Pipeline module to orchestrate end-to-end model training.
 This script performs:
 1. Config loading from model_utils
 2. Dynamic model instantiation
-3. Training data loading
+3. Training data loadingl
 4. Model training
 5. Saving trained model
 

@@ -16,7 +16,7 @@ from typing import Dict, Tuple
 import numpy as np
 import yaml
 from src.utils.logger import get_logger
-from src.training.optimizers import get_optimizer  # Factory to get optimizer by name
+from src.optimizers import get_optimizer  # Factory to get optimizer by name
 from src.utils.config import load_config
 from src.monitoring.monitor import TrainingMonitor
 

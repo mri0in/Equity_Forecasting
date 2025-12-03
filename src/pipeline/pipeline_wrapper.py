@@ -8,12 +8,14 @@ Each stage now logs start/end events and captures metrics or errors.
 """
 
 from typing import Optional
-from src.pipeline.run_ingestion import IngestionPipeline
-from src.pipeline.run_training import ModelTrainerPipeline
-from src.pipeline.run_optimizer import run_hyperparameter_optimization
-from src.pipeline.run_ensemble import run_ensemble, load_ensemble_config
-from src.pipeline.run_prediction import run_prediction_pipeline
-from src.pipeline.run_walk_forward import run_walk_forward_validation
+from src.pipeline.A_ingestion_pipeline import IngestionPipeline
+from src.pipeline.B_preprocessing_pipeline import PreprocessingPipeline
+from src.pipeline.C_feature_gen_pipeline import FeaturePipeline
+from src.pipeline.D_optimization_pipeline import run_hyperparameter_optimization
+from src.pipeline.E_ensemble_pipeline import run_ensemble, load_ensemble_config
+from src.pipeline.F_training_pipeline import ModelTrainerPipeline
+from src.pipeline.G_wfv_pipeline import run_walk_forward_validation
+from src.pipeline.H_prediction_pipeline import run_prediction_pipeline
 from src.monitoring.monitor import log_stage_start, log_stage_end
 from src.utils.logger import get_logger
 
@@ -35,16 +37,51 @@ def run_ingestion(tickers: list, start_date: str = "2013-01-01", end_date: str =
         log_stage_end(stage_name, metrics={"status": "failed", "error": str(e)})
         raise
 
-def run_training(config_path: str) -> None:
-    """Wrapper for training stage with monitoring."""
-    stage_name = "training_pipeline"
+def run_preprocessing(config_path: str) -> None:
+    """
+    Wrapper for preprocessing stage with monitoring.
+    This is called by the DAGRunner and serves as a pure orchestration-layer hook.
+    """
+
+    stage_name = "preprocessing_pipeline"
     log_stage_start(stage_name, details={"config_path": config_path})
+
     try:
-        pipeline = ModelTrainerPipeline(config_path)
+        
+        pipeline = PreprocessingPipeline(config_path=config_path)
         pipeline.run()
+
         log_stage_end(stage_name, metrics={"status": "completed"})
+
     except Exception as e:
-        log_stage_end(stage_name, metrics={"status": "failed", "error": str(e)})
+        log_stage_end(stage_name, metrics={
+            "status": "failed",
+            "error": str(e)
+        })
+        raise
+
+
+def run_feature_generation(config_path: str) -> None:
+    """
+    Wrapper for feature generation stage with monitoring.
+    Used by DAGRunner to trigger feature engineering across equities.
+    """
+
+    stage_name = "feature_generation_pipeline"
+    log_stage_start(stage_name, details={"config_path": config_path})
+
+    try:
+
+        pipeline = FeaturePipeline(config_path=config_path)
+        pipeline.run()
+
+        log_stage_end(stage_name, metrics={"status": "completed"})
+
+    except Exception as e:
+        log_stage_end(stage_name, metrics={
+            "status": "failed",
+            "error": str(e)
+        })
         raise
 
 
@@ -74,12 +111,13 @@ def run_ensemble(config_path: str):
         raise
 
 
-def run_prediction(config_path: str, ticker: Optional[str] = None) -> None:
-    """Wrapper for prediction stage with monitoring."""
-    stage_name = "prediction_pipeline"
-    log_stage_start(stage_name, details={"config_path": config_path, "ticker": ticker})
+def run_training(config_path: str) -> None:
+    """Wrapper for training stage with monitoring."""
+    stage_name = "training_pipeline"
+    log_stage_start(stage_name, details={"config_path": config_path})
     try:
-        run_prediction_pipeline(config_path, ticker)
+        pipeline = ModelTrainerPipeline(config_path)
+        pipeline.run()
         log_stage_end(stage_name, metrics={"status": "completed"})
     except Exception as e:
         log_stage_end(stage_name, metrics={"status": "failed", "error": str(e)})
@@ -97,3 +135,16 @@ def run_walk_forward(config_path: str):
     except Exception as e:
         log_stage_end(stage_name, metrics={"status": "failed", "error": str(e)})
         raise
+
+def run_prediction(config_path: str, ticker: Optional[str] = None) -> None:
+    """Wrapper for prediction stage with monitoring."""
+    stage_name = "prediction_pipeline"
+    log_stage_start(stage_name, details={"config_path": config_path, "ticker": ticker})
+    try:
+        run_prediction_pipeline(config_path, ticker)
+        log_stage_end(stage_name, metrics={"status": "completed"})
+    except Exception as e:
+        log_stage_end(stage_name, metrics={"status": "failed", "error": str(e)})
+        raise
+
+

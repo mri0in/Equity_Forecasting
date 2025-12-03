@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from unittest.mock import MagicMock
 
-from src.pipeline.run_optimizer import load_training_data, run_hyperparameter_optimization
+from src.pipeline.D_optimization_pipeline import load_training_data, run_hyperparameter_optimization
 
 
 def test_load_training_data_success(tmp_path):

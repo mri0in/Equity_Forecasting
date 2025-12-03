@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from src.pipeline.run_walk_forward import run_walk_forward_validation
+from src.pipeline.G_wfv_pipeline import run_walk_forward_validation
 
 
 def test_run_walk_forward_validation_success(monkeypatch):

@@ -17,11 +17,11 @@ import joblib
 import pandas as pd
 
 from src.pipeline import (
-    run_training,
-    run_optimizer,
-    run_walk_forward,
-    run_ensemble,
-    run_prediction,
+    D_optimization_pipeline,
+    E_ensemble_pipeline,
+    F_training_pipeline,
+    G_wfv_pipeline,
+    H_prediction_pipeline,
 )
 from src.utils.config_loader import load_typed_config, FullConfig
 
@@ -154,15 +154,15 @@ class PipelineOrchestrator:
                 monitor.log_stage_start(task, {"attempt": attempt + 1})
 
                 if task == "train":
-                    run_training(self.config_path)
+                    F_training_pipeline(self.config_path)
                 elif task == "optimize":
-                    run_optimizer(self.config_path)
+                    D_optimization_pipeline(self.config_path)
                 elif task == "ensemble":
-                    run_ensemble(self.config_path)
+                    E_ensemble_pipeline(self.config_path)
                 elif task == "predict":
-                    run_prediction(self.config_path)
+                    H_prediction_pipeline(self.config_path)
                 elif task == "walkforward":
-                    run_walk_forward(self.config_path)
+                    G_wfv_pipeline(self.config_path)
                 else:
                     self.logger.warning(f"Unknown task '{task}' — skipping")
 

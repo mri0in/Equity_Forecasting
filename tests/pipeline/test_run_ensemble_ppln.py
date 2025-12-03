@@ -4,7 +4,7 @@ import pandas as pd
 import yaml
 from unittest.mock import patch, MagicMock, mock_open
 
-from src.pipeline.run_ensemble import run_ensemble,load_ensemble_config
+from src.pipeline.E_ensemble_pipeline import run_ensemble,load_ensemble_config
 
 
 @pytest.fixture

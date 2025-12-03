@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 from unittest.mock import patch, MagicMock
 
-from src.pipeline.run_prediction import load_features, run_prediction_pipeline
+from src.pipeline.H_prediction_pipeline import load_features, run_prediction_pipeline
 
 
 def test_load_features_success(tmp_path):

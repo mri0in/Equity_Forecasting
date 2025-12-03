@@ -12,11 +12,11 @@ import logging
 from typing import Any
 
 from src.pipeline import (
-    run_training,
-    run_optimizer,
-    run_walk_forward,
-    run_ensemble,
-    run_prediction,
+    D_optimization_pipeline,
+    E_ensemble_pipeline,
+    F_training_pipeline,
+    G_wfv_pipeline,
+    H_prediction_pipeline,
     pipeline_wrapper
 )
 
@@ -61,7 +61,7 @@ class PipelineStages:
         Model training stage.
         """
         logger.info("Starting training stage...")
-        run_training.run_training_pipeline()
+        F_training_pipeline.run_training_pipeline()
         logger.info("Training stage completed.")
 
     def run_optimizer(self) -> None:
@@ -69,7 +69,7 @@ class PipelineStages:
         Hyperparameter optimization stage.
         """
         logger.info("Starting optimizer stage...")
-        run_optimizer.run_optimizer_pipeline()
+        D_optimization_pipeline.run_hyperparameter_optimization()
         logger.info("Optimizer stage completed.")
 
     def run_walkforward(self) -> None:
@@ -77,7 +77,7 @@ class PipelineStages:
         Walk-forward validation stage.
         """
         logger.info("Starting walk-forward validation stage...")
-        run_walk_forward.run_walk_forward_pipeline()
+        G_wfv_pipeline.run_walk_forward_pipeline()
         logger.info("Walk-forward validation stage completed.")
 
     def run_ensembling(self) -> None:
@@ -85,7 +85,7 @@ class PipelineStages:
         Ensembling stage: generate meta-features, train meta-models, simple ensemble.
         """
         logger.info("Starting ensembling stage...")
-        run_ensemble.run_ensemble_pipeline()
+        E_ensemble_pipeline.run_ensemble_pipeline()
         logger.info("Ensembling stage completed.")
 
     def run_forecasting(self) -> None:
@@ -93,5 +93,5 @@ class PipelineStages:
         Forecasting stage: generate predictions for a given equity.
         """
         logger.info("Starting forecasting stage...")
-        run_prediction.run_prediction_pipeline()
+        H_prediction_pipeline.run_prediction_pipeline()
         logger.info("Forecasting stage completed.")

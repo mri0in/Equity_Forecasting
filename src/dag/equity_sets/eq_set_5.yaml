@@ -1,0 +1,9 @@
+universe_name: "eq_set_5"
+description: "Small development universe — mix of NIFTY + US top equities."
+
+equities:
+  - INFY.NS
+  - TCS.NS
+  - RELIANCE.NS
+  - AAPL
+  - MSFT

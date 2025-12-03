@@ -31,17 +31,17 @@ In short:
 - Orchestrator → use `pipeline_wrapper`
 """
 # Bind submodules into the package namespace as *modules*
-from . import run_training       as run_training   # module
-from . import run_optimizer      as run_optimizer  # module
-from . import run_walk_forward   as run_walk_forward  # module
-from . import run_ensemble       as run_ensemble   # module
-from . import run_prediction     as run_prediction # module
+from . import F_training_pipeline       as F_training_pipeline   # module
+from . import D_optimization_pipeline      as D_optimization_pipeline  # module
+from . import G_wfv_pipeline   as G_wfv_pipeline  # module
+from . import E_ensemble_pipeline       as E_ensemble_pipeline   # module
+from . import H_prediction_pipeline     as H_prediction_pipeline # module
 
 
 __all__ = [
-    "run_training",
-    "run_optimizer",
-    "run_walk_forward",
-    "run_ensemble",
-    "run_prediction",
+    "F_training_pipeline",
+    "D_optimization_pipeline",
+    "G_wfv_pipeline",
+    "E_ensemble_pipeline",
+    "H_prediction_pipeline",
 ]

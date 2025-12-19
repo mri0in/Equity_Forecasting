@@ -37,7 +37,6 @@ from src.utils.logger import get_logger
 from src.utils.config import load_config
 
 logger = get_logger(__name__)
-monitor = TrainingMonitor()
 
 
 class IngestionPipeline:
@@ -61,7 +60,7 @@ class IngestionPipeline:
         Sleep between tickers to avoid burst loads.
     max_retries : int
         Number of retries per ticker on failure.
-    save_dir : str
+    data_dir : str
         Directory to save raw CSV files.
     max_age_days : int
         Number of days after which a cached file is considered stale and will be refreshed.
@@ -73,6 +72,8 @@ class IngestionPipeline:
 
         cfg = load_config(config_path)
         ingest_cfg = cfg.get("ingestion", {})
+        run_id = f"INGESTION_{datetime.timestamp}"
+        run_dir = f"datalake/runs/ingestion/{self.run_id}"
 
         # Input validation and defaults
         self.tickers: List[str] = ingest_cfg.get("tickers", [])
@@ -83,15 +84,16 @@ class IngestionPipeline:
         self.end_date: Optional[str] = ingest_cfg.get("end_date", None)
         self.sleep_time: float = float(ingest_cfg.get("sleep_time", 0.25))
         self.max_retries: int = int(ingest_cfg.get("max_retries", 3))
-        self.save_dir: str = ingest_cfg.get("save_path", "datalake/data/raw/")
+        self.data_dir: str = ingest_cfg.get("save_path", "datalake/data/raw/")
         self.max_age_days: int = int(ingest_cfg.get("max_age_days", 90))
+        self.monitor = TrainingMonitor(run_id=run_id, run_dir=run_dir, visualize=False, flush_every=1)
 
         # Ensure save directory exists
-        Path(self.save_dir).mkdir(parents=True, exist_ok=True)
+        Path(self.data_dir).mkdir(parents=True, exist_ok=True)
 
         logger.info(
-            "IngestionPipeline initialized: %d tickers, save_dir=%s, max_age_days=%d",
-            len(self.tickers), self.save_dir, self.max_age_days
+            "IngestionPipeline initialized: %d tickers, data_dir=%s, max_age_days=%d",
+            len(self.tickers), self.data_dir, self.max_age_days
         )
 
     # ------------------------------------------------------------------
@@ -100,7 +102,7 @@ class IngestionPipeline:
     def _raw_file_path(self, ticker: str) -> str:
         """Return platform-safe raw CSV path for a ticker."""
         safe_name = ticker.replace(".", "_").replace("/", "_")
-        return os.path.join(self.save_dir, f"{safe_name}.csv")
+        return os.path.join(self.data_dir, f"{safe_name}.csv")
 
     def needs_refresh(self, file_path: str) -> bool:
         """
@@ -188,7 +190,7 @@ class IngestionPipeline:
         Downloads only missing or stale raw files and logs progress via the monitor.
         """
         stage_name = "ingestion_pipeline"
-        monitor.log_stage_start(stage_name, {"num_tickers": len(self.tickers)})
+        self.monitor.log_stage_start(stage_name, {"num_tickers": len(self.tickers)})
 
         try:
             logger.info("Starting ingestion for %d tickers...", len(self.tickers))
@@ -201,10 +203,10 @@ class IngestionPipeline:
                 else:
                     logger.info("[%s] Skip download (fresh): %s", ticker, file_path)
 
-            monitor.log_stage_end(stage_name, {"status": "completed"})
+            self.monitor.log_stage_end(stage_name, {"status": "completed"})
             logger.info("Ingestion pipeline completed successfully.")
 
         except Exception as exc:
             logger.exception("Ingestion pipeline failed: %s", exc)
-            monitor.log_stage_end(stage_name, {"status": "failed"})
+            self.monitor.log_stage_end(stage_name, {"status": "failed"})
             raise

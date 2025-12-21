@@ -1,16 +1,8 @@
 ingestion:
-  tickers:
-    - AAPL
-    - MSFT
-    - GOOGL
-    - INFY
-    - TCS
-
+  tickers: ["AAPL"]
   start_date: "2015-01-01"
   end_date: null
-
-  sleep_time: 0.25        # critical for Yahoo rate limits
+  sleep_time: 0.5      # critical for Yahoo rate limits
   max_retries: 3
-
   save_path: "datalake/data/raw/"
-  max_age_days: 90        # cache expiry / freshness window
+  max_age_days: 90      # cache expiry / freshness window

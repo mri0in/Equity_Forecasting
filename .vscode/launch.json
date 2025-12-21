@@ -9,6 +9,16 @@
       "env": { "PYTHONPATH": "src"},
       "args": ["tests"],
       "justMyCode": false
+    },
+    {
+      "name": "Run Ingestion Pipeline",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "src.pipeline.A_ingestion_pipeline",
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "src" },
+      "console": "integratedTerminal",
+      "justMyCode": true
     }
   ]
 }

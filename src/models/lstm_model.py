@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader, TensorDataset
 import numpy as np
 
 from src.models.base_model import BaseModel
-from src.training.optimizers.early_stopping import EarlyStopping
+from src.optimizers.early_stopping import EarlyStopping
 
 class LSTMModel(BaseModel):
     """

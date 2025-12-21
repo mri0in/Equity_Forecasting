@@ -1,0 +1,2 @@
+{"event": "stage_start", "stage": "ingestion_pipeline", "payload": {"num_tickers": 1}, "timestamp": "2025-12-21T16:03:56.076931Z"}
+{"event": "stage_end", "stage": "ingestion_pipeline", "payload": {"status": "completed"}, "timestamp": "2025-12-21T16:07:37.518636Z"}

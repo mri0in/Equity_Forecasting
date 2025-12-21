@@ -32,7 +32,7 @@ from __future__ import annotations
 import csv
 import json
 import os
-import threading
+from threading import Lock
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -98,7 +98,7 @@ class TrainingMonitor:
         self.save_dir = save_dir
         self.visualize = visualize
         self.flush_every = max(1, int(flush_every))
-        self._lock = threading.Lock()
+        self._lock = Lock()
 
         # internal buffers
         self.epoch_records: List[EpochRecord] = []
@@ -148,12 +148,12 @@ class TrainingMonitor:
     # -------------------------
     def _append_jsonl(self, record: Dict[str, Any]) -> None:
         """
-        Append a JSON line to the metrics.jsonl file in a thread-safe way.
+        Append a JSON line to the metrics.jsonl file.
+        Assumes caller already holds the lock.
         """
         try:
-            with self._lock:
-                with open(self.metrics_jsonl, "a", encoding="utf-8") as fh:
-                    fh.write(json.dumps(record, default=str) + "\n")
+            with open(self.metrics_jsonl, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps(record, default=str) + "\n")
         except Exception as e:
             logger.error(f"Failed to append to metrics.jsonl: {e}")
 
@@ -279,6 +279,8 @@ class TrainingMonitor:
         payload : dict | None
             Additional metadata for the stage start event.
         """
+        if not hasattr(self, "_lock"):
+            raise RuntimeError("TrainingMonitor not initialized correctly (_lock missing)")
         event = {
             "event": "stage_start",
             "stage": stage_name,

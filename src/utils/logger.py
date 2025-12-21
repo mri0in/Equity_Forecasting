@@ -23,6 +23,7 @@ def get_logger(name: str, level: str = "INFO", log_file: Optional[str] = None) -
         # Set level from config
         numeric_level = getattr(logging, level.upper(), logging.INFO)
         logger.setLevel(numeric_level)
+        logger.propagate = False
 
         # Console handler
         console_handler = logging.StreamHandler(sys.stdout)

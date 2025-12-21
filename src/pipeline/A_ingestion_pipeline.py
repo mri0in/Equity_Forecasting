@@ -6,29 +6,21 @@ Downloads raw OHLCV data for a list of tickers (NSE + global) using yfinance,
 but only when the raw file is missing or older than a configurable expiry
 (e.g., 90 days). Designed to be called from the pipeline wrapper / DAG.
 
-Expected config.yaml excerpt:
------------------------------
-ingestion:
-  tickers: ["AAPL", "MSFT", "RELIANCE.NS"]
-  start_date: "2013-01-01"
-  end_date: null
-  sleep_time: 0.25
-  max_retries: 3
-  save_path: "datalake/data/raw/"
-  max_age_days: 90
-
-Notes:
-- This module performs only ingestion orchestration.
-- Actual download/backoff logic is implemented here; saving is to the configured save_path.
+Key points:
+- Each ticker gets a single canonical CSV in `data/raw/`
+- Each batch checks every ticker for freshness (max_age_days)
+- Child-process + hard timeout ensures no hang on Windows
+- Retries & exponential backoff are applied per ticker
 """
 
 from __future__ import annotations
 
 import os
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
+from multiprocessing import Process, Queue
 
 import yfinance as yf
 
@@ -39,46 +31,48 @@ from src.utils.config import load_config
 logger = get_logger(__name__)
 
 
+# ---------------------------------------------------------------------
+# Child-process Yahoo worker (TOP-LEVEL for Windows compatibility)
+# ---------------------------------------------------------------------
+def _yahoo_download_worker(ticker: str, start_date: str, end_date: Optional[str], q: Queue) -> None:
+    """
+    Fetch Yahoo Finance OHLCV data in a separate process.
+    Returns either DataFrame or Exception via Queue.
+    """
+    try:
+        df = yf.download(
+            tickers=ticker,
+            start=start_date,
+            end=end_date,
+            interval="1d",
+            progress=False,
+            auto_adjust=False,
+        )
+        q.put(df)
+    except Exception as exc:
+        q.put(exc)
+
+
 class IngestionPipeline:
     """
-    Orchestrates downloading raw OHLCV CSVs for a universe of tickers.
-
-    The pipeline is config-driven. It will *skip* downloading any ticker whose
-    raw CSV file exists and whose modification time is within `max_age_days`.
-
-    Attributes
-    ----------
-    config_path : str
-        Path to the YAML configuration used to drive ingestion parameters.
-    tickers : List[str]
-        List of ticker symbols to ingest.
-    start_date : str
-        Start date for yfinance download.
-    end_date : Optional[str]
-        End date for yfinance download.
-    sleep_time : float
-        Sleep between tickers to avoid burst loads.
-    max_retries : int
-        Number of retries per ticker on failure.
-    data_dir : str
-        Directory to save raw CSV files.
-    max_age_days : int
-        Number of days after which a cached file is considered stale and will be refreshed.
+    Orchestrates ingestion of raw OHLCV CSVs for a list of tickers.
+    Ensures canonical storage under `data/raw/` with freshness enforcement.
     """
 
     def __init__(self, config_path: str) -> None:
         if not config_path:
-            raise ValueError("config_path must be provided to IngestionPipeline")
+            raise ValueError("config_path must be provided")
 
         cfg = load_config(config_path)
         ingest_cfg = cfg.get("ingestion", {})
-        run_id = f"INGESTION_{datetime.timestamp}"
-        run_dir = f"datalake/runs/ingestion/{self.run_id}"
 
-        # Input validation and defaults
+        run_id = f"INGESTION_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+        self.run_dir = f"datalake/runs/ingestion/{run_id}"
+
+        # Config-driven parameters
         self.tickers: List[str] = ingest_cfg.get("tickers", [])
         if not isinstance(self.tickers, list):
-            raise TypeError("ingestion.tickers must be a list of ticker strings")
+            raise TypeError("ingestion.tickers must be a list")
 
         self.start_date: str = ingest_cfg.get("start_date", "2013-01-01")
         self.end_date: Optional[str] = ingest_cfg.get("end_date", None)
@@ -86,127 +80,117 @@ class IngestionPipeline:
         self.max_retries: int = int(ingest_cfg.get("max_retries", 3))
         self.data_dir: str = ingest_cfg.get("save_path", "datalake/data/raw/")
         self.max_age_days: int = int(ingest_cfg.get("max_age_days", 90))
-        self.monitor = TrainingMonitor(run_id=run_id, run_dir=run_dir, visualize=False, flush_every=1)
+        self.timeout_sec: int = int(ingest_cfg.get("timeout_sec", 20))
 
-        # Ensure save directory exists
+        # Monitoring
+        self.monitor = TrainingMonitor(
+            run_id=run_id,
+            save_dir=self.run_dir,
+            visualize=False,
+            flush_every=1,
+        )
+
         Path(self.data_dir).mkdir(parents=True, exist_ok=True)
-
         logger.info(
-            "IngestionPipeline initialized: %d tickers, data_dir=%s, max_age_days=%d",
-            len(self.tickers), self.data_dir, self.max_age_days
+            "IngestionPipeline initialized | tickers=%d | timeout=%ss | retries=%d",
+            len(self.tickers),
+            self.timeout_sec,
+            self.max_retries,
         )
 
     # ------------------------------------------------------------------
-    # Helper: file freshness check
+    # File helpers
     # ------------------------------------------------------------------
     def _raw_file_path(self, ticker: str) -> str:
-        """Return platform-safe raw CSV path for a ticker."""
-        safe_name = ticker.replace(".", "_").replace("/", "_")
-        return os.path.join(self.data_dir, f"{safe_name}.csv")
+        """Generate a filesystem-safe canonical CSV path for a ticker."""
+        safe = ticker.replace(".", "_").replace("/", "_")
+        return os.path.join(self.data_dir, f"{safe}.csv")
 
-    def needs_refresh(self, file_path: str) -> bool:
-        """
-        Returns True if the file does not exist or is older than max_age_days.
+    def _is_fresh(self, path: str) -> bool:
+        """Return True if the file exists and is younger than max_age_days."""
+        if not os.path.exists(path):
+            return False
 
-        Parameters
-        ----------
-        file_path : str
-            Path to the raw CSV file.
-
-        Returns
-        -------
-        bool
-        """
-        p = Path(file_path)
-        if not p.exists():
-            logger.info("Raw file missing: %s (will download)", file_path)
-            return True
-
-        try:
-            mtime = datetime.fromtimestamp(p.stat().st_mtime)
-        except Exception:
-            # If we cannot stat the file for any reason, force refresh
-            logger.warning("Unable to stat file %s — forcing refresh", file_path)
-            return True
-
-        age = (datetime.now() - mtime).days
-        if age > self.max_age_days:
-            logger.info("Raw file stale (%d days) → will refresh: %s", age, file_path)
-            return True
-
-        logger.info("Raw file fresh (%d days) → skipping download: %s", age, file_path)
-        return False
+        mtime = datetime.fromtimestamp(os.path.getmtime(path))
+        age_days = (datetime.now() - mtime).days
+        logger.info("[INGEST] Existing file age=%d days (%s)", age_days, os.path.basename(path))
+        return age_days <= self.max_age_days
 
     # ------------------------------------------------------------------
-    # Internal: download single ticker with retry & backoff
+    # Yahoo fetch with HARD timeout
     # ------------------------------------------------------------------
-    def _download_ticker(self, ticker: str) -> None:
-        """
-        Download and save ticker CSV using yfinance with retry/backoff.
-        This method assumes needs_refresh() already determined we need to fetch.
-        """
+    def _fetch_with_timeout(self, ticker: str):
+        """Fetch Yahoo Finance data in a child process with hard timeout."""
+        q: Queue = Queue()
+        p = Process(target=_yahoo_download_worker, args=(ticker, self.start_date, self.end_date, q), daemon=True)
+
+        start_ts = time.time()
+        p.start()
+        p.join(timeout=self.timeout_sec)
+
+        if p.is_alive():
+            logger.error("[INGEST] TIMEOUT ticker=%s after %ss", ticker, self.timeout_sec)
+            p.terminate()
+            p.join()
+            return None
+
+        if q.empty():
+            logger.error("[INGEST] EMPTY response ticker=%s", ticker)
+            return None
+
+        result = q.get()
+        if isinstance(result, Exception):
+            logger.exception("[INGEST] EXCEPTION ticker=%s", ticker, exc_info=result)
+            return None
+
+        logger.info("[INGEST] Yahoo OK ticker=%s rows=%d elapsed=%.2fs", ticker, len(result), time.time() - start_ts)
+        return result
+
+    # ------------------------------------------------------------------
+    # Single-ticker ingestion
+    # ------------------------------------------------------------------
+    def _process_single_ticker(self, ticker: str) -> None:
+        """Ingest a single ticker with retry & backoff."""
         save_path = self._raw_file_path(ticker)
 
-        backoff_base = 1.5
+        if self._is_fresh(save_path):
+            logger.info("[INGEST] Skipping %s — fresh cache", ticker)
+            return
+
         for attempt in range(1, self.max_retries + 1):
-            try:
-                logger.info("[%s] Download attempt %d/%d", ticker, attempt, self.max_retries)
+            logger.info("[INGEST] %s attempt %d/%d", ticker, attempt, self.max_retries)
 
-                # Use period 'max' if start_date/end_date not set — but respect config
-                df = yf.download(
-                    tickers=ticker,
-                    start=self.start_date,
-                    end=self.end_date,
-                    progress=False,
-                )
+            df = self._fetch_with_timeout(ticker)
 
-                if df is None or df.empty:
-                    raise ValueError(f"No data returned for ticker {ticker}")
-
-                # Save CSV
+            if df is not None and not df.empty:
                 df.to_csv(save_path)
-                logger.info("[%s] Saved raw CSV → %s", ticker, save_path)
+                logger.info("[INGEST] Saved %s rows=%d path=%s", ticker, len(df), save_path)
                 return
 
-            except Exception as exc:
-                logger.error("[%s] Error on attempt %d: %s", ticker, attempt, exc)
-                if attempt < self.max_retries:
-                    sleep_for = backoff_base ** attempt
-                    logger.info("[%s] Backing off for %.1f sec before retry", ticker, sleep_for)
-                    time.sleep(sleep_for)
-                else:
-                    logger.error("[%s] Exhausted retries — skipping ticker", ticker)
+            if attempt < self.max_retries:
+                backoff = 2 ** attempt
+                logger.warning("[INGEST] %s retrying after %.1fs", ticker, backoff)
+                time.sleep(backoff)
 
-        # final inter-ticker sleep to avoid burst
-        logger.debug("Sleeping %.3fs between tickers", self.sleep_time)
-        time.sleep(self.sleep_time)
+        raise RuntimeError(f"Failed to ingest {ticker} after retries")
 
     # ------------------------------------------------------------------
-    # Public: run the ingestion pipeline
+    # Public entrypoint
     # ------------------------------------------------------------------
     def run(self) -> None:
-        """
-        Run ingestion for all tickers defined in config.
-        Downloads only missing or stale raw files and logs progress via the monitor.
-        """
+        """Run ingestion for all configured tickers with freshness enforcement."""
         stage_name = "ingestion_pipeline"
         self.monitor.log_stage_start(stage_name, {"num_tickers": len(self.tickers)})
 
-        try:
-            logger.info("Starting ingestion for %d tickers...", len(self.tickers))
+        logger.info("Starting ingestion loop")
+        for idx, ticker in enumerate(self.tickers, start=1):
+            logger.info("[INGEST] (%d/%d) Processing ticker=%s", idx, len(self.tickers), ticker)
+            try:
+                self._process_single_ticker(ticker)
+            except Exception as exc:
+                logger.error("[INGEST] FAILED ticker=%s error=%s", ticker, str(exc), exc_info=True)
 
-            for ticker in self.tickers:
-                file_path = self._raw_file_path(ticker)
-                if self.needs_refresh(file_path):
-                    # Attempt download (retries & backoff inside)
-                    self._download_ticker(ticker)
-                else:
-                    logger.info("[%s] Skip download (fresh): %s", ticker, file_path)
+            time.sleep(self.sleep_time)
 
-            self.monitor.log_stage_end(stage_name, {"status": "completed"})
-            logger.info("Ingestion pipeline completed successfully.")
-
-        except Exception as exc:
-            logger.exception("Ingestion pipeline failed: %s", exc)
-            self.monitor.log_stage_end(stage_name, {"status": "failed"})
-            raise
+        self.monitor.log_stage_end(stage_name, {"status": "completed"})
+        logger.info("Ingestion pipeline completed")

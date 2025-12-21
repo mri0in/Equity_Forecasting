@@ -1,4 +1,4 @@
-# src/pipeline/run_training.py
+# src/pipeline/F_training_pipeline.py
 """
 Pipeline module to orchestrate end-to-end model training.
 
@@ -15,6 +15,7 @@ Use wrappers in src/pipeline/pipeline_wrapper.py to enforce
 orchestration, logging, retries, and task markers.
 """
 
+from datetime import datetime, timezone
 import numpy as np
 from typing import Tuple
 from src.utils.logger import get_logger
@@ -22,7 +23,6 @@ from src.utils.model_utils import load_config_and_model
 from src.monitoring.monitor import TrainingMonitor
 
 logger = get_logger(__name__)
-monitor = TrainingMonitor()
 
 
 class ModelTrainerPipeline:
@@ -32,14 +32,43 @@ class ModelTrainerPipeline:
 
     def __init__(self, config_path: str):
         """
-        Constructor: loads configuration and model instance.
+        Constructor: loads configuration, model instance, and initializes monitoring.
 
         Args:
             config_path (str): Path to YAML config file
         """
-        monitor.log_stage_start("init_pipeline", {"config_path": config_path})
+        if not config_path:
+            raise ValueError("config_path must be provided to ModelTrainerPipeline")
+
+        
         self.config, self.model = load_config_and_model(config_path)
-        monitor.log_stage_end("init_pipeline")
+        train_cfg = self.config.get("training", {})
+
+        scope = train_cfg.get("scope", "GLOBAL")  # GLOBAL / NIFTY / RELIANCE / etc
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        self.run_id: str = f"{scope}_TRAIN_{timestamp}"
+
+        # -------------------------------------------------
+        # Run directory (monitor artifacts)
+        # -------------------------------------------------
+        base_run_dir = train_cfg.get("run_dir", "runs/training")
+        self.run_dir: str = f"{base_run_dir}/{self.run_id}"
+
+        # -------------------------------------------------
+        # Training monitor (MUST be runtime-scoped)
+        # -------------------------------------------------
+        self.monitor = TrainingMonitor(
+            run_id=self.run_id,
+            save_dir=self.run_dir,
+            visualize=bool(train_cfg.get("visualize", False)),
+            flush_every=int(train_cfg.get("flush_every", 1)),
+        )
+
+        logger.info(
+            "Initialized ModelTrainerPipeline | run_id=%s | run_dir=%s",
+            self.run_id,
+            self.run_dir,
+        )
 
     def load_training_data(self) -> Tuple[np.ndarray, np.ndarray]:
         """
@@ -48,7 +77,7 @@ class ModelTrainerPipeline:
         Returns:
             Tuple[np.ndarray, np.ndarray]: X (features), y (targets)
         """
-        monitor.log_stage_start("load_training_data")
+        self.monitor.log_stage_start("load_training_data")
         try:
             x_path = self.config["data"]["X_train_path"]
             y_path = self.config["data"]["y_train_path"]
@@ -57,9 +86,9 @@ class ModelTrainerPipeline:
             logger.info("Loaded training data: X=%s, y=%s", X.shape, y.shape)
         except Exception as e:
             logger.exception("Error loading training data")
-            monitor.log_stage_end("load_training_data", success=False)
+            self.monitor.log_stage_end("load_training_data", success=False)
             raise
-        monitor.log_stage_end("load_training_data")
+        self.monitor.log_stage_end("load_training_data")
         return X, y
 
     def run(self) -> None:
@@ -69,7 +98,7 @@ class ModelTrainerPipeline:
         - Train model
         - Save model
         """
-        monitor.log_stage_start("run_training_pipeline")
+        self.monitor.log_stage_start("run_training_pipeline")
         try:
             X, y = self.load_training_data()
             self.model.train(X, y)
@@ -79,19 +108,7 @@ class ModelTrainerPipeline:
             logger.info("Model training completed and saved to: %s", save_path)
         except Exception as e:
             logger.exception("Training pipeline failed")
-            monitor.log_stage_end("run_training_pipeline", success=False)
+            self.monitor.log_stage_end("run_training_pipeline", success=False)
             raise
-        monitor.log_stage_end("run_training_pipeline")
+        self.monitor.log_stage_end("run_training_pipeline")
 
-
-def run_training_pipeline(config_path: str) -> None:
-    """
-    Function-based entry point for external importers.
-
-    Args:
-        config_path (str): Path to YAML configuration
-    """
-    monitor.log_stage_start("entry_run_training_pipeline", {"config_path": config_path})
-    pipeline = ModelTrainerPipeline(config_path)
-    pipeline.run()
-    monitor.log_stage_end("entry_run_training_pipeline")

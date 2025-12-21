@@ -3,7 +3,7 @@
 import importlib
 from pydantic import BaseModel
 from typing import List, Optional
-from utils.config import load_config  # your existing YAML loader
+from src.utils.config import load_config  # your existing YAML loader
 
 
 # -------------------

@@ -6,3 +6,4 @@ ingestion:
   max_retries: 3
   save_path: "datalake/data/raw/"
   max_age_days: 90      # cache expiry / freshness window
+  timeout_sec: 60     # timeout for data download process

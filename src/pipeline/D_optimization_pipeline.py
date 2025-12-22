@@ -1,126 +1,174 @@
-# src/pipeline/D_optimization_pipeline.py
-
 """
-Module to orchestrate hyperparameter optimization for equity forecasting models.
+D. Optimization Pipeline
+------------------------
+Consumes feature Parquet files generated in Pipeline C and performs
+hyperparameter optimization (e.g., Optuna) in a run-aware, reproducible manner.
 
-This module loads configuration, training data, selects the optimizer backend dynamically,
-runs the hyperparameter search, and logs the progress.
+Responsibilities:
+- Load feature datasets for the current ingestion run
+- Invoke optimizer backend (Optuna, etc.)
+- Log trials, parameters, and metrics
 
-⚠️ IMPORTANT WARNING:
-Do NOT call these functions directly in end-user workflows.
-Use wrappers in src/pipeline/pipeline_wrapper.py to enforce orchestration, logging,
-retries, and task markers.
+Non-responsibilities:
+- Feature generation
+- Model training
+- Walk-forward validation
 """
 
-from typing import Dict, Tuple
-from datetime import datetime, timezone
-import numpy as np
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Dict, List
+
+import pandas as pd
 
 from src.utils.logger import get_logger
-from src.optimizers import get_optimizer
 from src.utils.config import load_config
 from src.monitoring.monitor import TrainingMonitor
+from src.optimizers import get_optimizer
 
-logger = get_logger(__name__)
 
-
-def load_training_data(
-    x_path: str,
-    y_path: str,
-    monitor: TrainingMonitor,
-) -> Tuple[np.ndarray, np.ndarray]:
+class OptimizationPipeline:
     """
-    Load training features and targets from given file paths.
+    Hyperparameter optimization pipeline.
     """
-    monitor.log_stage_start("load_training_data", {"X_path": x_path, "y_path": y_path})
-    try:
-        X = np.load(x_path)
-        y = np.load(y_path)
-        logger.info("Loaded training data: X=%s y=%s", X.shape, y.shape)
-        monitor.log_stage_end("load_training_data", {"status": "success"})
-        return X, y
-    except Exception as e:
-        monitor.log_stage_end(
-            "load_training_data",
-            {"status": "failed", "error": str(e)},
-        )
-        raise
 
+    def __init__(
+        self,
+        run_id: str,
+        config_path: str,
+        feature_root: str = "datalake/data/cache/features",
+        optimizer_name: str = "optuna",
+    ) -> None:
+        self.run_id = run_id
+        self.config_path = config_path
+        self.feature_root = Path(feature_root)
+        self.optimizer_name = optimizer_name
 
-def run_hyperparameter_optimization(
-    config_path: str,
-    optimizer_name: str = "optuna",
-) -> None:
-    """
-    Main orchestration function for running hyperparameter optimization.
-    """
-    if not config_path:
-        raise ValueError("config_path must be provided")
+        self.logger = get_logger(self.__class__.__name__)
+        self.config: Dict = load_config(config_path)
 
-    # -------------------------------------------------
-    # Load config
-    # -------------------------------------------------
-    config: Dict = load_config(config_path)
-    train_cfg = config.get("training", {})
-    optim_cfg = config.get("optimization", {})
+        self.optim_cfg: Dict = self.config.get("optimization", {})
+        self.train_cfg: Dict = self.config.get("training", {})
 
-    # -------------------------------------------------
-    # Run identity
-    # -------------------------------------------------
-    scope = train_cfg.get("scope", "GLOBAL")
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    run_id = f"{scope}_OPTIM_{timestamp}"
-
-    base_run_dir = optim_cfg.get("run_dir", "runs/optimization")
-    run_dir = f"{base_run_dir}/{run_id}"
-
-    # -------------------------------------------------
-    # Runtime monitor (CORRECT)
-    # -------------------------------------------------
-    monitor = TrainingMonitor(
-        run_id=run_id,
-        save_dir=run_dir,
-        visualize=False,
-        flush_every=int(optim_cfg.get("flush_every", 1)),
-    )
-
-    monitor.log_stage_start(
-        "run_hyperparameter_optimization",
-        {"config_path": config_path, "optimizer": optimizer_name},
-    )
-
-    try:
-        # -------------------------------------------------
-        # Load data
-        # -------------------------------------------------
-        x_path = config["data"]["X_train_path"]
-        y_path = config["data"]["y_train_path"]
-        X_train, y_train = load_training_data(x_path, y_path, monitor)
-
-        # -------------------------------------------------
-        # Optimizer
-        # -------------------------------------------------
-        optimizer_func = get_optimizer(optimizer_name)
-        n_trials = train_cfg.get("n_trials", 50)
-
-        monitor.log_stage_start(
-            "hyperparameter_search",
-            {"n_trials": n_trials, "optimizer": optimizer_name},
+        self.monitor = TrainingMonitor(
+            run_id=run_id,
+            save_dir=f"datalake/runs/optimization/{run_id}",
         )
 
-        optimizer_func(
-            config=config,
-            X=X_train,
-            y=y_train,
-            n_trials=n_trials,
+    # ------------------------------------------------------------------
+    # Internal utilities
+    # ------------------------------------------------------------------
+    def _load_feature_files(self) -> List[Path]:
+        """
+        Load feature Parquet files produced by Pipeline C for this run.
+        """
+        if not self.feature_root.exists():
+            raise FileNotFoundError(
+                f"Feature root not found: {self.feature_root}"
+            )
+
+        files = sorted(self.feature_root.glob("*.parquet"))
+
+        if not files:
+            raise RuntimeError(
+                "No feature Parquet files found. "
+                "Ensure Pipeline C has completed successfully."
+            )
+
+        self.logger.info(
+            "[OPT] Found %d feature files", len(files)
+        )
+        return files
+
+    def _load_features(self, path: Path) -> pd.DataFrame:
+        """
+        Load a single Parquet feature file.
+        """
+        df = pd.read_parquet(path)
+
+        if df.empty:
+            raise ValueError(f"Empty feature file: {path.name}")
+
+        return df
+
+    # ------------------------------------------------------------------
+    # Pipeline execution
+    # ------------------------------------------------------------------
+    def run(self) -> None:
+        """
+        Execute hyperparameter optimization.
+        """
+        stage = "optimization_pipeline"
+
+        self.monitor.log_stage_start(
+            stage,
+            {
+                "optimizer": self.optimizer_name,
+                "run_id": self.run_id,
+            },
         )
 
-        monitor.log_stage_end("hyperparameter_search", {"status": "success"})
-        monitor.log_stage_end("run_hyperparameter_optimization", {"status": "completed"})
+        self.logger.info("Starting optimization pipeline")
 
-    except Exception as e:
-        monitor.log_stage_end(
-            "run_hyperparameter_optimization",
-            {"status": "failed", "error": str(e)},
-        )
-        raise
+        feature_files = self._load_feature_files()
+        optimizer_fn = get_optimizer(self.optimizer_name)
+
+        n_trials = int(self.optim_cfg.get("n_trials", 50))
+
+        for idx, feature_path in enumerate(feature_files, start=1):
+            ticker = feature_path.stem
+
+            self.logger.info(
+                "[OPT] (%d/%d) Optimizing ticker=%s",
+                idx,
+                len(feature_files),
+                ticker,
+            )
+
+            try:
+                df = self._load_features(feature_path)
+
+                self.monitor.log_stage_start(
+                    "hyperparameter_search",
+                    {
+                        "ticker": ticker,
+                        "n_trials": n_trials,
+                    },
+                )
+
+                optimizer_fn(
+                    config=self.config,
+                    df=df,
+                    ticker=ticker,
+                    n_trials=n_trials,
+                    monitor=self.monitor,
+                )
+
+                self.monitor.log_stage_end(
+                    "hyperparameter_search",
+                    {
+                        "ticker": ticker,
+                        "status": "success",
+                    },
+                )
+
+            except Exception as exc:
+                self.logger.error(
+                    "[OPT] Failed optimization for %s: %s",
+                    ticker,
+                    str(exc),
+                    exc_info=True,
+                )
+
+                self.monitor.log_stage_end(
+                    "hyperparameter_search",
+                    {
+                        "ticker": ticker,
+                        "status": "failed",
+                        "error": str(exc),
+                    },
+                )
+
+        self.monitor.log_stage_end(stage, {"status": "completed"})
+        self.logger.info("Optimization pipeline completed")

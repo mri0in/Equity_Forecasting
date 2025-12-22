@@ -2,29 +2,17 @@
 """
 Training monitor module.
 
-Provides TrainingMonitor: a lightweight file-based monitor for training runs.
+Provides TrainingMonitor: a lightweight file-based monitor for pipeline runs.
 - Writes incremental JSONLines logs for near-real-time dashboard polling.
-- Produces CSV summaries and PNG plots at finalize().
-- Tracks epoch-level, fold-level and trial-level metrics, plus arbitrary events.
+- Persists run-level artifacts in a deterministic artifacts.json file.
+- Produces CSV summaries and PNG plots at finalize() (for training stages).
 
-Usage (example):
-    monitor = TrainingMonitor(run_id="RELIANCE_20251125", save_dir="datalake/experiments/monitor/RELIANCE", visualize=False)
-    monitor.start_session(model="LSTM_v1", config={"lr":1e-3})
-    for epoch in range(epochs):
-        monitor.log_epoch(epoch=epoch, train_loss=..., val_loss=..., lr=..., early_stop=False)
-    monitor.log_fold(fold_idx=0, val_score=0.012)
-    monitor.log_trial(trial_idx=0, best_val=0.011, params={"lr":1e-3})
-    monitor.finalize()
+Artifact Policies:
+------------------
+- "none"     : metrics.jsonl only
+- "metrics"  : metrics.jsonl + CSV artifacts
+- "training" : metrics.jsonl + CSV + plots
 
-Design notes:
-- File outputs:
-    <save_dir>/metrics.jsonl     (append-only stream)
-    <save_dir>/epoch_metrics.csv
-    <save_dir>/fold_metrics.csv
-    <save_dir>/trial_metrics.csv
-    <save_dir>/plots/<loss_curve>.png
-    <save_dir>/training_summary.json
-- All timestamps are UTC ISO8601.
 """
 
 from __future__ import annotations
@@ -32,26 +20,34 @@ from __future__ import annotations
 import csv
 import json
 import os
-from threading import Lock
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
-
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
+from threading import Lock
+from typing import Any, Dict, List, Optional, Literal
 
 import logging
+import pandas as pd
+import matplotlib.pyplot as plt
 
+# ---------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 
+# ---------------------------------------------------------------------
+# Utilities
+# ---------------------------------------------------------------------
 def _utcnow_iso() -> str:
+    """Return current UTC timestamp in ISO-8601 format."""
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-@dataclass
+# ---------------------------------------------------------------------
+# Data Records (Immutable Contracts)
+# ---------------------------------------------------------------------
+@dataclass(frozen=True)
 class EpochRecord:
     epoch: int
     train_loss: Optional[float]
@@ -61,14 +57,14 @@ class EpochRecord:
     timestamp: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class FoldRecord:
     fold_idx: int
     val_score: float
     timestamp: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class TrialRecord:
     trial_idx: int
     best_val: float
@@ -76,211 +72,100 @@ class TrialRecord:
     timestamp: str
 
 
+# ---------------------------------------------------------------------
+# TrainingMonitor
+# ---------------------------------------------------------------------
 class TrainingMonitor:
     """
-    TrainingMonitor writes epoch/fold/trial events to disk and creates summary plots.
+    Unified monitor for all pipeline stages.
 
     Parameters
     ----------
     run_id : str
-        Unique identifier for the training run (e.g. "RELIANCE_20251125_01").
+        Globally unique run identifier.
     save_dir : str
-        Directory where logs, CSVs, and plots will be written.
-    visualize : bool
-        If True, attempt to show plots via plt.show() when finalize() is called.
-        (Default False — suitable for headless servers.)
-    flush_every : int
-        After how many epoch logs to flush the JSONL file. Default 1 (immediate).
+        Root directory where all artifacts will be written.
+    artifact_policy : {"none", "metrics", "training"}
+        Controls which artifacts are persisted.
+    enable_plots : bool
+        Whether plotting is enabled (only relevant for training policy).
+
+    Notes
+    -----
+    - metrics.jsonl is ALWAYS written (append-only)
+    - CSVs and plots are written only when policy allows
+    - No file is overwritten across stages
     """
 
-    def __init__(self, run_id: str, save_dir: str, visualize: bool = False, flush_every: int = 1) -> None:
+    def __init__(
+        self,
+        run_id: str,
+        save_dir: str,
+        artifact_policy: Literal["none", "metrics", "training"],
+        enable_plots: bool = False,
+    ) -> None:
         self.run_id = run_id
         self.save_dir = save_dir
-        self.visualize = visualize
-        self.flush_every = max(1, int(flush_every))
+        self.artifact_policy = artifact_policy
+        self.enable_plots = enable_plots
+
         self._lock = Lock()
 
-        # internal buffers
-        self.epoch_records: List[EpochRecord] = []
-        self.fold_records: List[FoldRecord] = []
-        self.trial_records: List[TrialRecord] = []
-        self.events: List[Dict[str, Any]] = []
+        # ------------------------------------------------------------------
+        # Buffers (in-memory, flushed explicitly)
+        # ------------------------------------------------------------------
+        self._epoch_records: List[EpochRecord] = []
+        self._fold_records: List[FoldRecord] = []
+        self._trial_records: List[TrialRecord] = []
+        self._events: List[Dict[str, Any]] = []
 
-        # file paths
+        # ------------------------------------------------------------------
+        # Artifact paths (stable contract)
+        # ------------------------------------------------------------------
         os.makedirs(self.save_dir, exist_ok=True)
-        self.metrics_jsonl = os.path.join(self.save_dir, "metrics.jsonl")
-        self.epoch_csv = os.path.join(self.save_dir, "epoch_metrics.csv")
-        self.fold_csv = os.path.join(self.save_dir, "fold_metrics.csv")
-        self.trial_csv = os.path.join(self.save_dir, "trial_metrics.csv")
-        self.plots_dir = os.path.join(self.save_dir, "plots")
-        os.makedirs(self.plots_dir, exist_ok=True)
-        self.summary_json = os.path.join(self.save_dir, "training_summary.json")
 
-        # counters
-        self._epoch_log_count = 0
+        self.metrics_jsonl: str = os.path.join(self.save_dir, "metrics.jsonl")
+        self.epoch_csv: str = os.path.join(self.save_dir, "epoch_metrics.csv")
+        self.fold_csv: str = os.path.join(self.save_dir, "fold_metrics.csv")
+        self.trial_csv: str = os.path.join(self.save_dir, "trial_metrics.csv")
 
-        # session meta
-        self.session_info: Dict[str, Any] = {"run_id": self.run_id, "started_at": _utcnow_iso()}
-        logger.info(f"TrainingMonitor initialized for run_id={self.run_id} at {self.save_dir}")
+        self.plots_dir: str = os.path.join(self.save_dir, "plots")
+        self.artifact_manifest: str = os.path.join(self.save_dir, "artifacts.json")
 
-    # -------------------------
-    # Session lifecycle
-    # -------------------------
-    def start_session(self, model: Optional[str] = None, config: Optional[Dict[str, Any]] = None) -> None:
-        """
-        Record session-level metadata.
-        """
-        with self._lock:
-            self.session_info.update({"model": model, "config": config or {}, "session_started": _utcnow_iso()})
-            self._append_jsonl({"event": "session_start", "payload": self.session_info})
-            logger.info(f"Monitoring session started for {self.run_id} (model={model})")
+        if self.artifact_policy == "training":
+            os.makedirs(self.plots_dir, exist_ok=True)
 
-    def end_session(self) -> None:
-        """
-        Finalize session (alias for finalize()).
-        """
-        self.session_info["session_ended"] = _utcnow_iso()
-        self._append_jsonl({"event": "session_end", "payload": {"ended_at": self.session_info["session_ended"]}})
-        logger.info(f"Monitoring session ended for {self.run_id}")
+        # ------------------------------------------------------------------
+        # Session metadata
+        # ------------------------------------------------------------------
+        self._session_meta: Dict[str, Any] = {
+            "run_id": self.run_id,
+            "artifact_policy": self.artifact_policy,
+            "started_at": _utcnow_iso(),
+        }
 
-    # -------------------------
-    # Logging helpers
-    # -------------------------
+        logger.info(
+            "TrainingMonitor initialized | run_id=%s | policy=%s | plots=%s",
+            self.run_id,
+            self.artifact_policy,
+            self.enable_plots,
+        )
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
     def _append_jsonl(self, record: Dict[str, Any]) -> None:
-        """
-        Append a JSON line to the metrics.jsonl file.
-        Assumes caller already holds the lock.
-        """
+        """Append a single JSON record to metrics.jsonl."""
         try:
             with open(self.metrics_jsonl, "a", encoding="utf-8") as fh:
                 fh.write(json.dumps(record, default=str) + "\n")
-        except Exception as e:
-            logger.error(f"Failed to append to metrics.jsonl: {e}")
+        except Exception as exc:
+            logger.error("Failed to append metrics.jsonl", exc_info=exc)
 
-    # -------------------------
-    # Core logging methods
-    # -------------------------
-    def log_epoch(
-        self,
-        epoch: int,
-        train_loss: Optional[float],
-        val_loss: Optional[float],
-        lr: Optional[float] = None,
-        early_stop_triggered: bool = False,
-        extra: Optional[Dict[str, Any]] = None,
-    ) -> None:
-        """
-        Log epoch-level metrics.
-
-        Parameters
-        ----------
-        epoch : int
-        train_loss : float | None
-        val_loss : float | None
-        lr : float | None
-        early_stop_triggered : bool
-        extra : dict | None - additional arbitrary metrics to include
-        """
-        rec = EpochRecord(
-            epoch=int(epoch),
-            train_loss=None if train_loss is None else float(train_loss),
-            val_loss=None if val_loss is None else float(val_loss),
-            lr=None if lr is None else float(lr),
-            early_stopped=bool(early_stop_triggered),
-            timestamp=_utcnow_iso(),
-        )
-        with self._lock:
-            self.epoch_records.append(rec)
-            self._epoch_log_count += 1
-
-            payload = {"event": "epoch", "payload": asdict(rec)}
-            if extra:
-                payload["payload"]["extra"] = extra
-            self._append_jsonl(payload)
-
-            # update epoch CSV on the fly
-            try:
-                need_header = not os.path.exists(self.epoch_csv)
-                with open(self.epoch_csv, "a", newline="", encoding="utf-8") as csvf:
-                    writer = csv.writer(csvf)
-                    if need_header:
-                        writer.writerow(["epoch", "train_loss", "val_loss", "lr", "early_stopped", "timestamp"])
-                    writer.writerow([rec.epoch, rec.train_loss, rec.val_loss, rec.lr, rec.early_stopped, rec.timestamp])
-            except Exception as e:
-                logger.error(f"Failed to write epoch CSV: {e}")
-
-            # periodic flush (already written to disk each call, keeping for compliance)
-            if self._epoch_log_count % self.flush_every == 0:
-                # ensure file is synced; we opened+closed it so it's on disk; we still notify
-                logger.debug(f"Epoch log flushed (count={self._epoch_log_count})")
-
-    def log_fold(self, fold_idx: int, val_score: float, extra: Optional[Dict[str, Any]] = None) -> None:
-        """
-        Log per-fold validation metric (used by Walk-Forward).
-        """
-        rec = FoldRecord(fold_idx=int(fold_idx), val_score=float(val_score), timestamp=_utcnow_iso())
-        with self._lock:
-            self.fold_records.append(rec)
-            self._append_jsonl({"event": "fold", "payload": asdict(rec)})
-            # append CSV
-            try:
-                need_header = not os.path.exists(self.fold_csv)
-                with open(self.fold_csv, "a", newline="", encoding="utf-8") as csvf:
-                    writer = csv.writer(csvf)
-                    if need_header:
-                        writer.writerow(["fold_idx", "val_score", "timestamp"])
-                    writer.writerow([rec.fold_idx, rec.val_score, rec.timestamp])
-            except Exception as e:
-                logger.error(f"Failed to write fold CSV: {e}")
-
-    def log_trial(self, trial_idx: int, best_val: float, params: Dict[str, Any]) -> None:
-        """
-        Log Optuna/Opt-like trial summary.
-        """
-        rec = TrialRecord(trial_idx=int(trial_idx), best_val=float(best_val), params=params or {}, timestamp=_utcnow_iso())
-        with self._lock:
-            self.trial_records.append(rec)
-            self._append_jsonl({"event": "trial", "payload": asdict(rec)})
-            # append CSV
-            try:
-                need_header = not os.path.exists(self.trial_csv)
-                with open(self.trial_csv, "a", newline="", encoding="utf-8") as csvf:
-                    writer = csv.writer(csvf)
-                    if need_header:
-                        writer.writerow(["trial_idx", "best_val", "params_json", "timestamp"])
-                    writer.writerow([rec.trial_idx, rec.best_val, json.dumps(rec.params, default=str), rec.timestamp])
-            except Exception as e:
-                logger.error(f"Failed to write trial CSV: {e}")
-
-    def log_event(self, name: str, payload: Optional[Dict[str, Any]] = None) -> None:
-        """
-        Generic event logger. Useful to record early-stop, saving checkpoints, etc.
-        """
-        event = {"event": name, "payload": payload or {}, "timestamp": _utcnow_iso()}
-        with self._lock:
-            self.events.append(event)
-            self._append_jsonl(event)
-            logger.info(f"Monitor event logged: {name}")
-
-
-    # -------------------------
-    # Stage-level lifecycle logging
-    # -------------------------
+    # ------------------------------------------------------------------
+    # Stage lifecycle logging
+    # ------------------------------------------------------------------
     def log_stage_start(self, stage_name: str, payload: Optional[Dict[str, Any]] = None) -> None:
-        """
-        Log the start of a logical stage in the pipeline.
-        Example stages: 'data_preprocessing', 'feature_engineering', 
-        'training', 'walkforward', 'forecasting', 'postprocessing'.
-
-        Parameters
-        ----------
-        stage_name : str
-            Name of the stage.
-        payload : dict | None
-            Additional metadata for the stage start event.
-        """
-        if not hasattr(self, "_lock"):
-            raise RuntimeError("TrainingMonitor not initialized correctly (_lock missing)")
         event = {
             "event": "stage_start",
             "stage": stage_name,
@@ -288,21 +173,11 @@ class TrainingMonitor:
             "timestamp": _utcnow_iso(),
         }
         with self._lock:
-            self.events.append(event)
+            self._events.append(event)
             self._append_jsonl(event)
-        logger.info(f"[MONITOR] Stage START: {stage_name}")
+        logger.info("[MONITOR] Stage START: %s", stage_name)
 
     def log_stage_end(self, stage_name: str, payload: Optional[Dict[str, Any]] = None) -> None:
-        """
-        Log the end of a logical stage in the pipeline.
-
-        Parameters
-        ----------
-        stage_name : str
-            Name of the stage.
-        payload : dict | None
-            Additional metadata containing final stats.
-        """
         event = {
             "event": "stage_end",
             "stage": stage_name,
@@ -310,168 +185,121 @@ class TrainingMonitor:
             "timestamp": _utcnow_iso(),
         }
         with self._lock:
-            self.events.append(event)
+            self._events.append(event)
             self._append_jsonl(event)
-        logger.info(f"[MONITOR] Stage END: {stage_name}")
+        logger.info("[MONITOR] Stage END: %s", stage_name)
 
+    # ------------------------------------------------------------------
+    # Metric logging
+    # ------------------------------------------------------------------
+    def log_epoch(
+        self,
+        epoch: int,
+        train_loss: Optional[float],
+        val_loss: Optional[float],
+        lr: Optional[float] = None,
+        early_stop_triggered: bool = False,
+    ) -> None:
+        if self.artifact_policy == "none":
+            return
 
+        record = EpochRecord(
+            epoch=epoch,
+            train_loss=train_loss,
+            val_loss=val_loss,
+            lr=lr,
+            early_stopped=early_stop_triggered,
+            timestamp=_utcnow_iso(),
+        )
 
-    # -------------------------
-    # Finalize & plotting
-    # -------------------------
-    def finalize(self, save_plots: bool = True) -> Dict[str, Any]:
+        with self._lock:
+            self._epoch_records.append(record)
+            self._append_jsonl({"event": "epoch", "payload": asdict(record)})
+
+    def log_fold(self, fold_idx: int, val_score: float) -> None:
+        if self.artifact_policy == "none":
+            return
+
+        record = FoldRecord(fold_idx, val_score, _utcnow_iso())
+
+        with self._lock:
+            self._fold_records.append(record)
+            self._append_jsonl({"event": "fold", "payload": asdict(record)})
+
+    def log_trial(self, trial_idx: int, best_val: float, params: Dict[str, Any]) -> None:
+        if self.artifact_policy != "training":
+            return
+
+        record = TrialRecord(trial_idx, best_val, params, _utcnow_iso())
+
+        with self._lock:
+            self._trial_records.append(record)
+            self._append_jsonl({"event": "trial", "payload": asdict(record)})
+
+    # ------------------------------------------------------------------
+    # Finalization & artifact persistence
+    # ------------------------------------------------------------------
+    def finalize(self) -> Dict[str, Any]:
         """
-        Finalize monitoring: create summary JSON, plots, and return a dict of artifact paths.
-
-        Returns
-        -------
-        Dict[str, Any]
-            {
-                "metrics_jsonl": <path>,
-                "epoch_csv": <path>,
-                "fold_csv": <path>,
-                "trial_csv": <path>,
-                "plots": {"loss_curve": <path>, "fold_perf": <path>, "optuna_progress": <path>},
-                "summary_json": <path>
-            }
+        Flush all buffered artifacts and write artifact manifest.
         """
-        self.session_info["finalized_at"] = _utcnow_iso()
-        summary: Dict[str, Any] = {
+        logger.info("Finalizing TrainingMonitor | run_id=%s", self.run_id)
+
+        artifacts: Dict[str, Any] = {
             "run_id": self.run_id,
-            "session_info": self.session_info,
+            "artifact_policy": self.artifact_policy,
             "metrics_jsonl": self.metrics_jsonl,
-            "epoch_csv": self.epoch_csv,
-            "fold_csv": self.fold_csv,
-            "trial_csv": self.trial_csv,
+            "epoch_csv": None,
+            "fold_csv": None,
+            "trial_csv": None,
             "plots": {},
-            "summary_json": self.summary_json,
         }
 
-        # Generate DataFrames
-        try:
-            epoch_df = pd.DataFrame([asdict(r) for r in self.epoch_records]) if self.epoch_records else pd.DataFrame()
-            fold_df = pd.DataFrame([asdict(r) for r in self.fold_records]) if self.fold_records else pd.DataFrame()
-            trial_df = pd.DataFrame([asdict(r) for r in self.trial_records]) if self.trial_records else pd.DataFrame()
-        except Exception as e:
-            logger.error(f"Failed to assemble DataFrames from records: {e}")
-            epoch_df = pd.DataFrame()
-            fold_df = pd.DataFrame()
-            trial_df = pd.DataFrame()
+        # ---------------- CSV persistence ----------------
+        if self.artifact_policy in ("metrics", "training"):
+            if self._epoch_records:
+                pd.DataFrame([asdict(r) for r in self._epoch_records]).to_csv(self.epoch_csv, index=False)
+                artifacts["epoch_csv"] = self.epoch_csv
 
-        # Save DataFrames as CSV (overwrite to ensure canonical)
-        try:
-            if not epoch_df.empty:
-                epoch_df.to_csv(self.epoch_csv, index=False)
-            if not fold_df.empty:
-                fold_df.to_csv(self.fold_csv, index=False)
-            if not trial_df.empty:
-                trial_df.to_csv(self.trial_csv, index=False)
-        except Exception as e:
-            logger.error(f"Failed to write summary CSVs: {e}")
+            if self._fold_records:
+                pd.DataFrame([asdict(r) for r in self._fold_records]).to_csv(self.fold_csv, index=False)
+                artifacts["fold_csv"] = self.fold_csv
 
-        # Create plots
-        plots_out: Dict[str, str] = {}
-        try:
-            if not epoch_df.empty:
-                p1 = os.path.join(self.plots_dir, f"{self.run_id}_loss_curve.png")
-                self._plot_loss_curve(epoch_df, out_path=p1)
-                plots_out["loss_curve"] = p1
+        if self.artifact_policy == "training" and self._trial_records:
+            pd.DataFrame([asdict(r) for r in self._trial_records]).to_csv(self.trial_csv, index=False)
+            artifacts["trial_csv"] = self.trial_csv
 
-            if not fold_df.empty:
-                p2 = os.path.join(self.plots_dir, f"{self.run_id}_fold_perf.png")
-                self._plot_fold_perf(fold_df, out_path=p2)
-                plots_out["fold_perf"] = p2
+        # ---------------- Plotting (explicit only) ----------------
+        if self.artifact_policy == "training" and self.enable_plots:
+            if self._epoch_records:
+                loss_plot = os.path.join(self.plots_dir, f"{self.run_id}_loss_curve.png")
+                self._plot_loss_curve(
+                    pd.DataFrame([asdict(r) for r in self._epoch_records]),
+                    loss_plot,
+                )
+                artifacts["plots"]["loss_curve"] = loss_plot
 
-            if not trial_df.empty:
-                p3 = os.path.join(self.plots_dir, f"{self.run_id}_optuna_progress.png")
-                self._plot_optuna_progress(trial_df, out_path=p3)
-                plots_out["optuna_progress"] = p3
-        except Exception as e:
-            logger.error(f"Failed to generate plots: {e}")
+        # ---------------- Artifact manifest ----------------
+        with open(self.artifact_manifest, "w", encoding="utf-8") as fh:
+            json.dump(artifacts, fh, indent=2)
 
-        summary["plots"] = plots_out
+        logger.info("TrainingMonitor finalized successfully")
+        return artifacts
 
-        # Write summary JSON
-        try:
-            with open(self.summary_json, "w", encoding="utf-8") as fh:
-                json.dump(summary, fh, indent=2, default=str)
-        except Exception as e:
-            logger.error(f"Failed to write summary JSON: {e}")
-
-        # Optionally show plots (useful during interactive runs)
-        if self.visualize:
-            try:
-                for p in plots_out.values():
-                    if os.path.exists(p):
-                        img = plt.imread(p)
-                        plt.figure(figsize=(10, 4))
-                        plt.imshow(img)
-                        plt.axis("off")
-                        plt.show()
-            except Exception as e:
-                logger.error(f"Failed to display plots interactively: {e}")
-
-        logger.info(f"TrainingMonitor finalized. Artifacts: {summary}")
-        return summary
-
-    # -------------------------
-    # Plotting primitives
-    # -------------------------
-    def _plot_loss_curve(self, epoch_df: pd.DataFrame, out_path: str) -> None:
-        """
-        Plot train vs validation loss with early-stop markers.
-        """
+    # ------------------------------------------------------------------
+    # Plotting primitives (training-only)
+    # ------------------------------------------------------------------
+    def _plot_loss_curve(self, df: pd.DataFrame, out_path: str) -> None:
+        """Plot training vs validation loss."""
         try:
             plt.figure(figsize=(10, 5))
-            if "epoch" in epoch_df.columns and "train_loss" in epoch_df.columns:
-                plt.plot(epoch_df["epoch"], epoch_df["train_loss"], label="train_loss")
-            if "epoch" in epoch_df.columns and "val_loss" in epoch_df.columns:
-                plt.plot(epoch_df["epoch"], epoch_df["val_loss"], label="val_loss")
-            # mark early stop epoch(s)
-            early_epochs = epoch_df[epoch_df["early_stopped"] == True]["epoch"].tolist() if "early_stopped" in epoch_df.columns else []
-            for e in early_epochs:
-                plt.axvline(e, linestyle="--", linewidth=0.8)
+            plt.plot(df["epoch"], df["train_loss"], label="train_loss")
+            plt.plot(df["epoch"], df["val_loss"], label="val_loss")
             plt.xlabel("Epoch")
             plt.ylabel("Loss")
-            plt.title(f"{self.run_id} — Loss Curve")
             plt.legend()
             plt.tight_layout()
             plt.savefig(out_path, dpi=150)
             plt.close()
-        except Exception as e:
-            logger.error(f"Failed to create loss curve plot: {e}")
-
-    def _plot_fold_perf(self, fold_df: pd.DataFrame, out_path: str) -> None:
-        """
-        Bar chart of fold validation scores.
-        """
-        try:
-            plt.figure(figsize=(8, 4))
-            if "fold_idx" in fold_df.columns and "val_score" in fold_df.columns:
-                plt.bar(fold_df["fold_idx"].astype(str), fold_df["val_score"])
-                plt.xlabel("Fold")
-                plt.ylabel("Validation Score")
-                plt.title(f"{self.run_id} — Fold Validation Scores")
-                plt.tight_layout()
-                plt.savefig(out_path, dpi=150)
-            plt.close()
-        except Exception as e:
-            logger.error(f"Failed to create fold perf plot: {e}")
-
-    def _plot_optuna_progress(self, trial_df: pd.DataFrame, out_path: str) -> None:
-        """
-        Plot best_val per trial (trial_idx on x-axis).
-        """
-        try:
-            plt.figure(figsize=(8, 4))
-            if "trial_idx" in trial_df.columns and "best_val" in trial_df.columns:
-                sorted_df = trial_df.sort_values("trial_idx")
-                plt.plot(sorted_df["trial_idx"], sorted_df["best_val"], marker="o")
-                plt.xlabel("Trial Index")
-                plt.ylabel("Best Validation Score")
-                plt.title(f"{self.run_id} — Optuna Trial Progress")
-                plt.tight_layout()
-                plt.savefig(out_path, dpi=150)
-            plt.close()
-        except Exception as e:
-            logger.error(f"Failed to create optuna progress plot: {e}")
+        except Exception as exc:
+            logger.error("Failed to plot loss curve", exc_info=exc)

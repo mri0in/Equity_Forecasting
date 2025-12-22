@@ -1,87 +1,145 @@
 # src/pipeline/B_preprocessing_pipeline.py
 """
-Preprocessing Pipeline
-----------------------
-Loads raw equity data from cache, cleans it (drop missing rows, select columns),
-and caches cleaned data for downstream feature building.
+B. Preprocessing Pipeline
+-------------------------
+Consumes ingestion artifacts, loads only the raw tickers ingested
+in the current run, performs lightweight cleaning, and writes
+cleaned data to cache/clean for downstream feature generation.
+
+Responsibilities:
+- Row cleaning (dropna)
+- Column filtering (required_columns)
+- Deterministic artifact-based processing
 """
 
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import List
+
 import pandas as pd
-from typing import List, Optional
-from src.utils.cache_manager import CacheManager
+
 from src.utils.logger import get_logger
+from src.monitoring.monitor import TrainingMonitor
 
 
 class PreprocessingPipeline:
     """
-    Handles preprocessing of raw equity data (cleaning & column selection)
+    Preprocessing pipeline operating strictly on ingestion artifacts.
     """
 
     def __init__(
         self,
-        required_columns: Optional[List[str]] = None,
-        equity: Optional[str] = None
-    ):
-        self.required_columns = required_columns
-        self.equity = equity
-        self.cache_manager = CacheManager.get_instance()
+        run_id: str,
+        required_columns: List[str] | None = None,
+        raw_root: str = "datalake/data/raw",
+        clean_root: str = "datalake/data/cache/clean",
+    ) -> None:
+        """
+        Parameters
+        ----------
+        run_id : str
+            Ingestion run_id whose artifacts should be processed.
+        required_columns : Optional[List[str]]
+            Columns to retain after cleaning. Defaults to 7 canonical columns.
+        raw_root : str
+            Root directory containing raw CSVs.
+        clean_root : str
+            Output directory for cleaned CSVs.
+        """
+        self.run_id = run_id
+        self.required_columns = required_columns or [
+            "Date", "Open", "High", "Low", "Close", "Adj Close", "Volume"
+        ]
+        self.raw_root = Path(raw_root)
+        self.clean_root = Path(clean_root)
+        self.clean_root.mkdir(parents=True, exist_ok=True)
+
         self.logger = get_logger(self.__class__.__name__)
+        self.monitor = TrainingMonitor(run_id=run_id)
 
-    # -----------------------------------------------------------------
-    # Data Cleaning Utilities
-    # -----------------------------------------------------------------
-    def drop_missing(self, df: pd.DataFrame) -> pd.DataFrame:
-        initial_shape = df.shape
-        df_clean = df.dropna()
-        self.logger.info(f"[{self.equity}] Dropped missing values: {initial_shape} → {df_clean.shape}")
-        return df_clean
+    # ------------------------------------------------------------------
+    # Internal utilities
+    # ------------------------------------------------------------------
+    def _load_ingestion_artifacts(self) -> list[dict]:
+        """
+        Load ingestion artifacts.jsonl for the given run_id.
+        Returns only tickers ingested in the current run.
+        """
+        artifacts_path = Path("datalake") / "runs" / "ingestion" / self.run_id / "artifacts.jsonl"
+        if not artifacts_path.exists():
+            raise FileNotFoundError(f"Ingestion artifacts not found for run_id={self.run_id}")
 
-    def select_columns(self, df: pd.DataFrame) -> pd.DataFrame:
-        if self.required_columns:
-            missing_cols = [col for col in self.required_columns if col not in df.columns]
-            if missing_cols:
-                self.logger.warning(f"[{self.equity}] Missing expected columns: {missing_cols}")
-            available_cols = [col for col in self.required_columns if col in df.columns]
-            df = df[available_cols]
-            self.logger.info(f"[{self.equity}] Selected columns: {df.columns.tolist()}")
+        artifacts: list[dict] = []
+        with artifacts_path.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                artifacts.append(json.loads(line))
+        return artifacts
+
+    def _drop_missing(self, df: pd.DataFrame, ticker: str) -> pd.DataFrame:
+        """
+        Drop rows with missing values.
+        """
+        before = df.shape
+        df = df.dropna()
+        after = df.shape
+        self.logger.info(f"[PRE] {ticker} dropna {before} -> {after}")
         return df
 
-    # -----------------------------------------------------------------
-    # Pipeline Execution
-    # -----------------------------------------------------------------
-    def run(self, df: pd.DataFrame, refresh_cache: bool = False) -> pd.DataFrame:
+    def _select_columns(self, df: pd.DataFrame, ticker: str) -> pd.DataFrame:
         """
-        Executes preprocessing steps:
-        - Load raw data from cache
-        - Clean data
-        - Cache cleaned data for feature building
+        Retain only required columns if specified.
         """
-        try:
-            self.logger.info(f"Starting preprocessing for {self.equity}...")
+        missing = [c for c in self.required_columns if c not in df.columns]
+        if missing:
+            self.logger.warning(f"[PRE] {ticker} missing columns: {missing}")
 
-            # Load raw data from cache
-            raw_cache_key = f"data_processor_{self.equity}"
-            raw_df = None
-            if not refresh_cache:
-                try:
-                    raw_df = self.cache_manager.load(raw_cache_key, module="data_processor")
-                    self.logger.info(f"Loaded raw data from cache for {self.equity}")
-                except FileNotFoundError:
-                    self.logger.info(f"No cached raw data for {self.equity}, using passed df")
+        available = [c for c in self.required_columns if c in df.columns]
+        df = df[available]
+        self.logger.info(f"[PRE] {ticker} selected columns: {available}")
+        return df
 
-            df_to_process = raw_df if raw_df is not None else df
+    # ------------------------------------------------------------------
+    # Pipeline execution
+    # ------------------------------------------------------------------
+    def run(self) -> None:
+        """
+        Execute preprocessing for all tickers present in ingestion artifacts.
+        """
+        self.monitor.log_stage_start("preprocessing_pipeline")
+        self.logger.info("Starting preprocessing pipeline")
 
-            # Step 1: Clean
-            df_clean = self.drop_missing(df_to_process)
-            df_clean = self.select_columns(df_clean)
+        artifacts = self._load_ingestion_artifacts()
 
-            # Step 2: Cache cleaned data
-            clean_cache_key = f"preprocessed_{self.equity}"
-            self.cache_manager.save(df_clean, clean_cache_key, module="features")
-            self.logger.info(f"Preprocessing completed and cached for {self.equity}")
+        for idx, artifact in enumerate(artifacts, start=1):
+            ticker = artifact["ticker"]
+            raw_path = Path(artifact["raw_path"])
+            self.logger.info(f"[PRE] ({idx}/{len(artifacts)}) Processing {ticker}")
 
-            return df_clean
+            if not raw_path.exists():
+                self.logger.error(f"[PRE] Raw file missing for {ticker}: {raw_path}")
+                continue
 
-        except Exception as e:
-            self.logger.error(f"Preprocessing failed for {self.equity}: {e}", exc_info=True)
-            raise
+            try:
+                df = pd.read_csv(raw_path)
+                df = self._drop_missing(df, ticker)
+                df = self._select_columns(df, ticker)
+
+                out_path = self.clean_root / f"{ticker}.csv"
+                df.to_csv(out_path, index=False)
+                self.logger.info(f"[PRE] Saved cleaned data {ticker} rows={len(df)} path={out_path}")
+
+                self.monitor.log_artifact(
+                    stage="preprocessing",
+                    artifact_type="clean_csv",
+                    ticker=ticker,
+                    path=str(out_path),
+                    rows=len(df),
+                )
+
+            except Exception as exc:
+                self.logger.error(f"[PRE] Failed preprocessing {ticker}: {exc}", exc_info=True)
+
+        self.monitor.log_stage_end("preprocessing_pipeline")
+        self.logger.info("Preprocessing pipeline completed")

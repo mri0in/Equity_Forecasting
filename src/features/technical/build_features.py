@@ -1,81 +1,123 @@
 # src/features/technical/build_features.py
+
+"""
+Feature Builder
+---------------
+Pure feature engineering module.
+
+This module is intentionally:
+- Stateless
+- Cache-agnostic
+- Deterministic
+
+All decisions regarding reuse, skipping, persistence, or formats
+(CSV vs Parquet) must be handled by the calling pipeline (Pipeline C).
+"""
+
+from typing import Final
 import pandas as pd
+
 from src.features.technical.candle_features import CandleFeatures
 from src.features.technical.trend_features import TrendFeatures
 from src.features.technical.momentum_features import MomentumFeatures
 from src.features.technical.volume_features import VolumeFeatures
-from src.utils.cache_manager import CacheManager
 from src.utils.logger import get_logger
+
 
 logger = get_logger(__name__)
 
+
 class FeatureBuilder:
     """
-    Orchestrates the application of multiple technical feature engineering steps
-    (Candlestick, Trend, Momentum, Volume) and caches results for efficiency.
+    Orchestrates technical feature generation for a single equity.
+
+    This class:
+    - Accepts a clean OHLCV DataFrame
+    - Applies multiple feature groups
+    - Returns a merged feature DataFrame
     """
 
     def __init__(self, equity: str):
         """
-        Initializes FeatureBuilder with OHLCV DataFrame and equity ticker.
-
-        Args:
-            equity (str): Equity ticker (used for cache keys)
+        Parameters
+        ----------
+        equity : str
+            Equity ticker symbol (used only for logging / traceability)
         """
-        self.equity = equity
-        self.cache_manager = CacheManager.get_instance()
-    
+        self.equity: Final[str] = equity
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
     def build_all(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Sequentially applies all technical feature engineering steps.
-        Uses caching to avoid recomputation.
+        Build all technical features.
 
-        Returns:
-            pd.DataFrame: DataFrame with all features appended
+        Parameters
+        ----------
+        df : pd.DataFrame
+            Clean OHLCV data indexed by datetime
+
+        Returns
+        -------
+        pd.DataFrame
+            Feature-enriched DataFrame
         """
-        cache_key = f"features_{self.ticker}"
-        refresh_cache = False  # Set to True to force recomputation
-        ttl_seconds = 30 * 24 * 60 * 60  # 1 month
+        self._validate_input(df)
 
-        
-        # Check cache first
-        if not refresh_cache and self.cache_manager.exists(cache_key, module="features"):
-            cached_result = self.cache_manager.load(cache_key, module="features")
-            if cached_result is not None:
-                return cached_result
-
-        # Initialize feature submodules with current df
-        candle = CandleFeatures(df, self.equity)
-        trend = TrendFeatures(df, self.equity)
-        momentum = MomentumFeatures(df, self.equity)
-        volume = VolumeFeatures(df, self.equity)
+        logger.info("Starting feature generation for equity=%s", self.equity)
 
         try:
-            logger.info(f"Building candle features for {self.equity}...")
-            df_candle = candle.compute_all()
-            logger.info("Candle features built.")
+            df_candle = self._build_candle_features(df)
+            df_trend = self._build_trend_features(df)
+            df_momentum = self._build_momentum_features(df)
+            df_volume = self._build_volume_features(df)
 
-            logger.info(f"Building trend features for {self.equity}...")
-            df_trend = trend.compute_all()
-            logger.info("Trend features built.")
+            df_features = pd.concat(
+                [df_candle, df_trend, df_momentum, df_volume],
+                axis=1,
+            )
 
-            logger.info(f"Building momentum features for {self.equity}...")
-            df_momentum = momentum.compute_all()
-            logger.info("Momentum features built.")
+            logger.info(
+                "Feature generation completed for equity=%s | shape=%s",
+                self.equity,
+                df_features.shape,
+            )
 
-            logger.info(f"Building volume features for {self.equity}...")
-            df_volume = volume.compute_all()
-            logger.info("Volume features built.")
+            return df_features
 
-            # Merge all features
-            df_all = pd.concat([df_candle, df_trend, df_momentum, df_volume], axis=1)
-
-            # Save final merged features to cache with expiry time(ttl) of 1 month
-            self.cache_manager.save(cache_key, df_all, module="features", ttl=ttl_seconds)
-            logger.info(f"All features built and cached successfully for {self.equity}.")
-
-        except Exception as e:
-            logger.error(f"Feature building failed for {self.equity}: {e}")
+        except Exception as exc:
+            logger.error(
+                "Feature generation failed for equity=%s: %s",
+                self.equity,
+                exc,
+                exc_info=True,
+            )
             raise
 
-        return df_all
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _validate_input(df: pd.DataFrame) -> None:
+        """
+        Validate input DataFrame structure.
+        """
+        if df is None or df.empty:
+            raise ValueError("Input DataFrame is empty or None")
+
+    def _build_candle_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        logger.info("Building candle features for %s", self.equity)
+        return CandleFeatures(df=df, equity=self.equity).compute_all()
+
+    def _build_trend_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        logger.info("Building trend features for %s", self.equity)
+        return TrendFeatures(df=df, equity=self.equity).compute_all()
+
+    def _build_momentum_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        logger.info("Building momentum features for %s", self.equity)
+        return MomentumFeatures(df=df, equity=self.equity).compute_all()
+
+    def _build_volume_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        logger.info("Building volume features for %s", self.equity)
+        return VolumeFeatures(df=df, equity=self.equity).compute_all()

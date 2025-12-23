@@ -57,7 +57,7 @@ class PreprocessingPipeline:
         self.clean_root.mkdir(parents=True, exist_ok=True)
 
         self.logger = get_logger(self.__class__.__name__)
-        self.monitor = TrainingMonitor(run_id=run_id)
+        self.monitor = TrainingMonitor(run_id=run_id, save_dir=Path(f"datalake/runs/{run_id}/preprocessing"), artifact_policy="none",)
 
     # ------------------------------------------------------------------
     # Internal utilities
@@ -67,7 +67,7 @@ class PreprocessingPipeline:
         Load ingestion artifacts.jsonl for the given run_id.
         Returns only tickers ingested in the current run.
         """
-        artifacts_path = Path("datalake") / "runs" / "ingestion" / self.run_id / "artifacts.jsonl"
+        artifacts_path = Path("datalake") / "runs" / self.run_id / "ingestion"  / "artifacts.jsonl"
         if not artifacts_path.exists():
             raise FileNotFoundError(f"Ingestion artifacts not found for run_id={self.run_id}")
 

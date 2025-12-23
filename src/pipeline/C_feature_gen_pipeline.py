@@ -71,8 +71,8 @@ class FeaturePipeline:
         artifacts_path = (
             Path("datalake")
             / "runs"
-            / "ingestion"
             / self.run_id
+            / "ingestion"
             / "artifacts.jsonl"
         )
 

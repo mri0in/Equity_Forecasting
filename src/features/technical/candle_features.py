@@ -1,6 +1,5 @@
 # src/features/technical/candle_features.py
 import pandas as pd
-from src.utils.cache_manager import CacheManager
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)

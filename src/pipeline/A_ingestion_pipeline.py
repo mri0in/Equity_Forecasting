@@ -44,8 +44,9 @@ class IngestionPipeline:
         # ------------------------------------------------------------------
         # Run metadata
         # ------------------------------------------------------------------
-        run_id = f"INGESTION_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
-        self.run_dir = f"datalake/runs/ingestion/{run_id}"
+        self.run_id = f"RUN_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+        self.run_dir = Path("datalake/runs") / self.run_id / "ingestion"
+        self.run_dir.mkdir(parents=True, exist_ok=True)
 
         # ------------------------------------------------------------------
         # Config parameters
@@ -65,7 +66,7 @@ class IngestionPipeline:
         # Monitoring
         # ------------------------------------------------------------------
         self.monitor = TrainingMonitor(
-            run_id=run_id,
+            run_id=self.run_id,
             save_dir=self.run_dir,
             artifact_policy="metrics",
             enable_plots=False,
@@ -198,36 +199,72 @@ class IngestionPipeline:
         except Exception as exc:
             logger.warning("Yahoo warm-up failed: %s", exc)
 
-    # ------------------------------------------------------------------
+   # ------------------------------------------------------------------
     # Public entrypoint
     # ------------------------------------------------------------------
-    def run(self) -> None:
-        """Run ingestion for all configured tickers."""
+    def run(self) -> str:
+        """
+        Run ingestion for all configured tickers.
+
+        Returns
+        -------
+        str
+            The generated run_id for this ingestion run.
+        """
         stage_name = "ingestion_pipeline"
 
-        self.monitor.log_stage_start(
-            stage_name,
-            {"num_tickers": len(self.tickers)},
-        )
+        self.monitor.log_stage_start(stage_name,{"num_tickers": len(self.tickers)},)
 
-        self._warmup_yahoo_session()
+        logger.info("Starting ingestion pipeline | run_id=%s", self.run_id)
 
-        logger.info("Starting ingestion loop")
+        try:
+            self._warmup_yahoo_session()
 
-        for idx, ticker in enumerate(self.tickers, start=1):
-            logger.info("[INGEST] (%d/%d) Processing ticker=%s", idx, len(self.tickers), ticker)
-            
-            try:
-                self._process_single_ticker(ticker)
-            except Exception as exc:
-                logger.error(
-                    "[INGEST] FAILED ticker=%s error=%s",
+            for idx, ticker in enumerate(self.tickers, start=1):
+                logger.info(
+                    "[INGEST] (%d/%d) Processing ticker=%s",
+                    idx,
+                    len(self.tickers),
                     ticker,
-                    str(exc),
-                    exc_info=True,
                 )
 
-            time.sleep(self.sleep_time)
+                try:
+                    self._process_single_ticker(ticker)
+                except Exception as exc:
+                    # Per-ticker isolation — ingestion continues
+                    logger.error(
+                        "[INGEST] FAILED ticker=%s error=%s",
+                        ticker,
+                        str(exc),
+                        exc_info=True,
+                    )
 
-        self.monitor.log_stage_end(stage_name, {"status": "completed"})
-        logger.info("Ingestion pipeline completed")
+                time.sleep(self.sleep_time)
+
+            # Normal completion
+            self.monitor.log_stage_end(
+                stage_name,
+                {"status": "completed", "tickers": len(self.tickers)},
+            )
+
+        except Exception as exc:
+            # Catastrophic failure (warmup, config, etc.)
+            logger.critical(
+                "Ingestion pipeline aborted | run_id=%s | error=%s",
+                self.run_id,
+                str(exc),
+                exc_info=True,
+            )
+            self.monitor.log_stage_end(
+                stage_name,
+                {"status": "failed", "error": str(exc)},
+            )
+            raise
+
+        finally:
+            self.monitor.finalize()
+
+        logger.info("Ingestion pipeline finished successfully | run_id=%s", self.run_id)
+        return self.run_id
+
+        

@@ -7,5 +7,5 @@ if __name__ == "__main__":
     pipeline = IngestionPipeline(
         config_path="src/dag/runners/A_ingestion_config.yaml"
     )
-    pipeline.run()
-
+    run_id = pipeline.run()
+    print(f"[RUN ID] {run_id}")

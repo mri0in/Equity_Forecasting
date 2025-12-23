@@ -53,7 +53,7 @@ class OptimizationPipeline:
 
         self.monitor = TrainingMonitor(
             run_id=run_id,
-            save_dir=f"datalake/runs/optimization/{run_id}",
+            save_dir=f"datalake/runs/{run_id}/optimization",
         )
 
     # ------------------------------------------------------------------

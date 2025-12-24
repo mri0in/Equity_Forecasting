@@ -1,4 +1,4 @@
-# src/dag/runners/B_run_preprocessing.py
+# src/dag/runners/run_B_preprocessing.py
 
 import argparse
 from src.pipeline.B_preprocessing_pipeline import PreprocessingPipeline

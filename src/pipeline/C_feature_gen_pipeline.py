@@ -2,25 +2,31 @@
 """
 C. Feature Generation Pipeline
 ------------------------------
-Consumes preprocessing artifacts (clean CSVs) derived from an ingestion run,
-generates technical features per ticker, and writes feature datasets to
-Parquet format for downstream modeling.
 
-Responsibilities:
-- Ingestion-run–aware ticker selection
-- Feature engineering (technical indicators only)
-- Parquet-based caching of per-ticker feature sets
-- Artifact logging for lineage and traceability
+This pipeline generates technical features from cleaned equity time-series
+data produced by the preprocessing pipeline (B).
 
-Non-responsibilities:
-- Data ingestion
-- Raw data cleaning
-- Dataset consolidation / model training
+Contract
+--------
+- C accepts a single runtime input: `run_id`
+- From `run_id`, C resolves the canonical ingestion artifact:
+      datalake/runs/{run_id}/ingestion/used_tickers.txt
+- Only tickers listed in this file are processed
+- Cleaned inputs are read from datalake/data/cache/clean/
+- Outputs are written as per-ticker Parquet files to
+  datalake/data/cache/features/
+
+Responsibilities
+---------------
+- Resolve the exact ticker universe used in the ingestion run
+- Load cleaned OHLCV CSVs
+- Generate technical indicators only (no labels, no joins)
+- Cache per-ticker's OHLCV data enriched with features in Parquet format
+
 """
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import List
 
@@ -29,11 +35,12 @@ import pandas as pd
 from src.features.technical.build_features import FeatureBuilder
 from src.monitoring.monitor import TrainingMonitor
 from src.utils.logger import get_logger
+import json as jsonlib
 
 
 class FeaturePipeline:
     """
-    Feature generation pipeline operating strictly on ingestion artifacts.
+    Feature generation pipeline driven strictly by ingestion run artifacts.
     """
 
     def __init__(
@@ -42,56 +49,83 @@ class FeaturePipeline:
         clean_root: str = "datalake/data/cache/clean",
         feature_root: str = "datalake/data/cache/features",
     ) -> None:
-        """
-        Parameters
-        ----------
-        run_id : str
-            Ingestion run_id whose outputs should be processed.
-        clean_root : str
-            Directory containing cleaned per-ticker CSVs.
-        feature_root : str
-            Output directory for per-ticker Parquet feature files.
-        """
+        if not run_id:
+            raise ValueError("run_id must be provided")
+
         self.run_id = run_id
         self.clean_root = Path(clean_root)
         self.feature_root = Path(feature_root)
 
         self.feature_root.mkdir(parents=True, exist_ok=True)
 
+        # Canonical ingestion artifact
+        self.used_tickers_path = (
+            Path("datalake")
+            / "runs"
+            / run_id
+            / "ingestion"
+            / "used_tickers.json"
+        )
+
         self.logger = get_logger(self.__class__.__name__)
-        self.monitor = TrainingMonitor(run_id=run_id)
+        self.monitor = TrainingMonitor(
+            run_id=run_id,
+            save_dir=Path(f"datalake/runs/{run_id}/features"),
+            artifact_policy="none",
+        )
+
+        self.logger.info(
+            "FeaturePipeline initialized | run_id=%s | used_tickers_path=%s",
+            run_id,
+            self.used_tickers_path,
+        )
 
     # ------------------------------------------------------------------
     # Internal utilities
     # ------------------------------------------------------------------
-    def _load_ingestion_artifacts(self) -> List[dict]:
+    def _load_used_tickers(self) -> List[str]:
         """
-        Load ingestion artifacts.jsonl for the given run_id.
-        """
-        artifacts_path = (
-            Path("datalake")
-            / "runs"
-            / self.run_id
-            / "ingestion"
-            / "artifacts.jsonl"
-        )
+        Load tickers used during ingestion for this run.
 
-        if not artifacts_path.exists():
+        Returns
+        -------
+        List[str]
+            Tickers eligible for feature generation.
+
+        Raises
+        ------
+        FileNotFoundError
+            If used_tickers.txt is missing.
+        """
+        if not self.used_tickers_path.exists():
             raise FileNotFoundError(
-                f"Ingestion artifacts not found for run_id={self.run_id}"
+                f"used_tickers.txt not found for run_id={self.run_id}"
+                f"path={self.used_tickers_path}"
             )
 
-        artifacts: List[dict] = []
-        with artifacts_path.open("r") as fh:
-            for line in fh:
-                artifacts.append(json.loads(line))
+        with self.used_tickers_path.open("r", encoding="utf-8") as fh:
+            payload = jsonlib.load(fh)
 
-        return artifacts
+        # -------- schema validation --------
+        if not isinstance(payload, dict):
+            raise ValueError("used_tickers.json must contain a JSON object")
+
+        tickers = payload.get("tickers")
+
+        if not isinstance(tickers, list) or not all(isinstance(t, str) for t in tickers):
+            raise ValueError(
+                "Invalid used_tickers.json schema: 'tickers' must be List[str]"
+            )
+
+        self.logger.info(
+            "[FEAT] Loaded %d tickers from ingestion run",
+            len(tickers),
+        )
+        return tickers
 
     def _is_up_to_date(self, clean_path: Path, feature_path: Path) -> bool:
         """
-        Determine whether feature file is already up-to-date
-        relative to the cleaned input.
+        Check whether feature file is newer than its cleaned input.
         """
         if not feature_path.exists():
             return False
@@ -103,65 +137,69 @@ class FeaturePipeline:
     # ------------------------------------------------------------------
     def run(self) -> None:
         """
-        Execute feature generation for all tickers present
-        in ingestion artifacts.
+        Execute feature generation for all tickers ingested in the given run.
+
+        Returns
+        -------
+        str
+            The run_id associated with this feature generation run.
         """
-        self.monitor.log_stage_start("feature_pipeline")
-        self.logger.info("Starting feature generation pipeline")
+        stage_name = "feature_pipeline"
 
-        artifacts = self._load_ingestion_artifacts()
+        used_tickers = self._load_used_tickers()
 
-        for idx, artifact in enumerate(artifacts, start=1):
-            ticker = artifact["ticker"]
+        self.monitor.log_stage_start(stage_name,{"num_tickers": len(used_tickers)},)
+
+        self.logger.info(
+            "Starting feature generation | run_id=%s | tickers=%d",
+            self.run_id,
+            len(used_tickers),
+        )
+
+        for idx, ticker in enumerate(used_tickers, start=1):
             clean_path = self.clean_root / f"{ticker}.csv"
             feature_path = self.feature_root / f"{ticker}.parquet"
 
-            self.logger.info(
-                f"[FEAT] ({idx}/{len(artifacts)}) Processing {ticker}"
-            )
+            self.logger.info("[FEAT] (%d/%d) Processing %s", idx, len(used_tickers), ticker,)
 
             if not clean_path.exists():
                 self.logger.error(
-                    f"[FEAT] Cleaned file missing for {ticker}: {clean_path}"
+                    "[FEAT] Cleaned file missing for %s: %s",
+                    ticker,
+                    clean_path,
                 )
                 continue
 
             if self._is_up_to_date(clean_path, feature_path):
                 self.logger.info(
-                    f"[FEAT] Skipping {ticker} (features already up-to-date)"
+                    "[FEAT] Skipping %s (features up-to-date)",
+                    ticker,
                 )
                 continue
 
             try:
                 df_clean = pd.read_csv(clean_path)
 
-                feature_builder = FeatureBuilder(equity=ticker)
-                df_features = feature_builder.build_all(df_clean)
+                builder = FeatureBuilder(equity=ticker)
+                df_features = builder.build_all(df_clean)
 
-                df_features.to_parquet(
-                    feature_path,
-                    index=False,
-                    engine="pyarrow",
-                )
+                df_features.to_parquet(feature_path, index=False, engine="pyarrow")
 
                 self.logger.info(
-                    f"[FEAT] Saved features {ticker} rows={len(df_features)} "
-                    f"path={feature_path}"
-                )
-
-                self.monitor.log_artifact(
-                    stage="feature_generation",
-                    artifact_type="feature_parquet",
-                    ticker=ticker,
-                    path=str(feature_path),
-                    rows=len(df_features),
+                    "[FEAT] Saved features %s rows=%d path=%s",
+                    ticker,
+                    len(df_features),
+                    feature_path,
                 )
 
             except Exception as exc:
                 self.logger.error(
-                    f"[FEAT] Feature generation failed for {ticker}: {exc}",
+                    "[FEAT] Feature generation failed for %s error=%s",
+                    ticker,
+                    str(exc),
                     exc_info=True,
                 )
 
-        self.monitor.log_stage_end("feature_pipeline")
-        self.logger.info("Feature generation pipeline completed")
+        self.monitor.log_stage_end(stage_name, {"status": "completed"},)
+
+        self.logger.info("Feature generation pipeline completed | run_id=%s", self.run_id,)

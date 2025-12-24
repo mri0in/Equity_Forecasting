@@ -1,36 +1,44 @@
+# src/pipeline/D_optimization_pipeline.py
 """
 D. Optimization Pipeline
-------------------------
-Consumes feature Parquet files generated in Pipeline C and performs
-hyperparameter optimization (e.g., Optuna) in a run-aware, reproducible manner.
+-----------------------
+Consumes feature datasets generated in Pipeline C and performs
+hyperparameter optimization in a run-aware, deterministic manner.
+
+This pipeline is strictly scoped to *searching* optimal hyperparameters
+for downstream training pipelines and does not train or persist final models.
 
 Responsibilities:
-- Load feature datasets for the current ingestion run
-- Invoke optimizer backend (Optuna, etc.)
-- Log trials, parameters, and metrics
+- Resolve tickers used in the ingestion run
+- Load per-ticker feature Parquet files
+- Execute hyperparameter optimization (e.g., Optuna)
+- Log trial parameters, metrics, and outcomes
 
 Non-responsibilities:
 - Feature generation
-- Model training
+- Dataset consolidation
 - Walk-forward validation
+- Model training or persistence
 """
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Dict, List
 
 import pandas as pd
 
-from src.utils.logger import get_logger
-from src.utils.config import load_config
 from src.monitoring.monitor import TrainingMonitor
 from src.optimizers import get_optimizer
+from src.utils.config import load_config
+from src.utils.logger import get_logger
 
 
 class OptimizationPipeline:
     """
-    Hyperparameter optimization pipeline.
+    Hyperparameter optimization pipeline operating strictly
+    on feature artifacts derived from an ingestion run.
     """
 
     def __init__(
@@ -38,57 +46,86 @@ class OptimizationPipeline:
         run_id: str,
         config_path: str,
         feature_root: str = "datalake/data/cache/features",
-        optimizer_name: str = "optuna",
     ) -> None:
+        """
+        Parameters
+        ----------
+        run_id : str
+            Ingestion run identifier whose artifacts define the ticker universe.
+        config_path : str
+            Path to YAML configuration containing optimization settings.
+        feature_root : str
+            Directory containing per-ticker feature Parquet files.
+        """
         self.run_id = run_id
-        self.config_path = config_path
         self.feature_root = Path(feature_root)
-        self.optimizer_name = optimizer_name
+        self.config_path = config_path
 
         self.logger = get_logger(self.__class__.__name__)
         self.config: Dict = load_config(config_path)
 
         self.optim_cfg: Dict = self.config.get("optimization", {})
-        self.train_cfg: Dict = self.config.get("training", {})
+        self.optimizer_name: str = self.optim_cfg.get("backend", "optuna")
+
+        self.used_tickers_path = (
+            Path("datalake")
+            / "runs"
+            / run_id
+            / "ingestion"
+            / "used_tickers.json"
+        )
 
         self.monitor = TrainingMonitor(
             run_id=run_id,
-            save_dir=f"datalake/runs/{run_id}/optimization",
+            save_dir=Path(f"datalake/runs/{run_id}/optimization"),
+            artifact_policy="none",
         )
 
     # ------------------------------------------------------------------
     # Internal utilities
     # ------------------------------------------------------------------
-    def _load_feature_files(self) -> List[Path]:
+    def _load_used_tickers(self) -> List[str]:
         """
-        Load feature Parquet files produced by Pipeline C for this run.
+        Load tickers used during ingestion for this run.
+
+        Returns
+        -------
+        List[str]
+            Deterministic list of tickers to optimize.
         """
-        if not self.feature_root.exists():
+        if not self.used_tickers_path.exists():
             raise FileNotFoundError(
-                f"Feature root not found: {self.feature_root}"
+                f"used_tickers.json not found for run_id={self.run_id}"
             )
 
-        files = sorted(self.feature_root.glob("*.parquet"))
+        with self.used_tickers_path.open("r", encoding="utf-8") as fh:
+            payload = json.load(fh)
 
-        if not files:
-            raise RuntimeError(
-                "No feature Parquet files found. "
-                "Ensure Pipeline C has completed successfully."
-            )
+        tickers = payload["tickers"]
 
         self.logger.info(
-            "[OPT] Found %d feature files", len(files)
+            "[OPT] Loaded %d tickers from ingestion run",
+            len(tickers),
         )
-        return files
+        return tickers
 
-    def _load_features(self, path: Path) -> pd.DataFrame:
+    def _load_features(self, ticker: str) -> pd.DataFrame:
         """
-        Load a single Parquet feature file.
+        Load feature dataset for a single ticker.
         """
-        df = pd.read_parquet(path)
+        feature_path = self.feature_root / f"{ticker}.parquet"
+
+        if not feature_path.exists():
+            raise FileNotFoundError(
+                f"Feature file missing for ticker={ticker}: {feature_path}"
+            )
+
+        df = pd.read_parquet(feature_path)
 
         if df.empty:
-            raise ValueError(f"Empty feature file: {path.name}")
+            raise ValueError(
+                f"Empty feature dataset for ticker={ticker}"
+            )
 
         return df
 
@@ -97,7 +134,8 @@ class OptimizationPipeline:
     # ------------------------------------------------------------------
     def run(self) -> None:
         """
-        Execute hyperparameter optimization.
+        Execute hyperparameter optimization for all tickers
+        present in the ingestion run.
         """
         stage = "optimization_pipeline"
 
@@ -111,23 +149,20 @@ class OptimizationPipeline:
 
         self.logger.info("Starting optimization pipeline")
 
-        feature_files = self._load_feature_files()
+        tickers = self._load_used_tickers()
         optimizer_fn = get_optimizer(self.optimizer_name)
-
         n_trials = int(self.optim_cfg.get("n_trials", 50))
 
-        for idx, feature_path in enumerate(feature_files, start=1):
-            ticker = feature_path.stem
-
+        for idx, ticker in enumerate(tickers, start=1):
             self.logger.info(
                 "[OPT] (%d/%d) Optimizing ticker=%s",
                 idx,
-                len(feature_files),
+                len(tickers),
                 ticker,
             )
 
             try:
-                df = self._load_features(feature_path)
+                df = self._load_features(ticker)
 
                 self.monitor.log_stage_start(
                     "hyperparameter_search",
@@ -155,7 +190,7 @@ class OptimizationPipeline:
 
             except Exception as exc:
                 self.logger.error(
-                    "[OPT] Failed optimization for %s: %s",
+                    "[OPT] Optimization failed for %s: %s",
                     ticker,
                     str(exc),
                     exc_info=True,

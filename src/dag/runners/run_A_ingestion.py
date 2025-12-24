@@ -1,4 +1,4 @@
-#src/dag/runners/A_run_ingestion.py
+#src/dag/runners/run_A_ingestion.py
 from src.pipeline.A_ingestion_pipeline import IngestionPipeline
 import multiprocessing as mp
 mp.set_start_method("spawn", force=True)

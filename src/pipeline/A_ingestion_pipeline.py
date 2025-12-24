@@ -10,12 +10,14 @@ Design guarantees:
 - Sequential, rate-limited fetching (Windows-safe)
 - Retry + exponential backoff per ticker
 - Full observability via logging + TrainingMonitor
+- Writes `used_tickers.json` for downstream pipelines
 """
 
 from __future__ import annotations
 
 import os
 import time
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
@@ -63,16 +65,17 @@ class IngestionPipeline:
         self.max_age_days: int = int(ingest_cfg.get("max_age_days", 90))
 
         # ------------------------------------------------------------------
-        # Monitoring
+        # Monitoring (no CSV/plots artifacts for ingestion)
         # ------------------------------------------------------------------
         self.monitor = TrainingMonitor(
             run_id=self.run_id,
             save_dir=self.run_dir,
-            artifact_policy="metrics",
+            artifact_policy="none",
             enable_plots=False,
         )
 
         Path(self.data_dir).mkdir(parents=True, exist_ok=True)
+        self._used_tickers: List[str] = []
 
         logger.info(
             "IngestionPipeline initialized | tickers=%d | retries=%d | max_age_days=%d",
@@ -97,24 +100,14 @@ class IngestionPipeline:
         mtime = datetime.fromtimestamp(os.path.getmtime(path))
         age_days = (datetime.now() - mtime).days
 
-        logger.info(
-            "[INGEST] Existing file %s age=%d days",
-            os.path.basename(path),
-            age_days,
-        )
+        logger.info("[INGEST] Existing file %s age=%d days", os.path.basename(path), age_days)
         return age_days <= self.max_age_days
 
     # ------------------------------------------------------------------
     # Yahoo Finance fetch (single-process, stable)
     # ------------------------------------------------------------------
     def _fetch_history(self, ticker: str):
-        """
-        Fetch OHLCV data from Yahoo Finance.
-
-        IMPORTANT:
-        - Runs in main process (no multiprocessing)
-        - Proven stable on Windows
-        """
+        """Fetch OHLCV data from Yahoo Finance."""
         start_ts = time.time()
         try:
             yf_ticker = yf.Ticker(ticker)
@@ -124,12 +117,10 @@ class IngestionPipeline:
                 auto_adjust=False,
                 actions=False,
             )
-
             if df is None or df.empty:
                 raise ValueError("Empty dataframe returned")
 
             df = df.reset_index()
-
             logger.info(
                 "[INGEST] Yahoo OK ticker=%s rows=%d elapsed=%.2fs",
                 ticker,
@@ -139,12 +130,7 @@ class IngestionPipeline:
             return df
 
         except Exception as exc:
-            logger.error(
-                "[INGEST] Yahoo FAILED ticker=%s error=%s",
-                ticker,
-                str(exc),
-                exc_info=True,
-            )
+            logger.error("[INGEST] Yahoo FAILED ticker=%s error=%s", ticker, str(exc), exc_info=True)
             return None
 
     # ------------------------------------------------------------------
@@ -156,50 +142,39 @@ class IngestionPipeline:
 
         if self._is_fresh(save_path):
             logger.info("[INGEST] Skipping %s — fresh cache", ticker)
+            self._used_tickers.append(ticker)
             return
 
         for attempt in range(1, self.max_retries + 1):
             logger.info("[INGEST] %s attempt %d/%d", ticker, attempt, self.max_retries)
-
             df = self._fetch_history(ticker)
 
             if df is not None and not df.empty:
                 df.to_csv(save_path, index=False)
-                logger.info(
-                    "[INGEST] Saved %s rows=%d path=%s",
-                    ticker,
-                    len(df),
-                    save_path,
-                )
+                logger.info("[INGEST] Saved %s rows=%d path=%s", ticker, len(df), save_path)
+                self._used_tickers.append(ticker)
                 return
 
             if attempt < self.max_retries:
                 backoff = 2 ** attempt
-                logger.warning(
-                    "[INGEST] %s retrying after %.1fs",
-                    ticker,
-                    backoff,
-                )
+                logger.warning("[INGEST] %s retrying after %.1fs", ticker, backoff)
                 time.sleep(backoff)
 
-        raise RuntimeError(f"Failed to ingest {ticker} after retries")
+        raise RuntimeError(f"Failed to ingest {ticker} after {self.max_retries} retries")
 
     # ------------------------------------------------------------------
     # Yahoo warm-up
     # ------------------------------------------------------------------
     def _warmup_yahoo_session(self) -> None:
-        """
-        Prime Yahoo Finance session to avoid first-call TLS stalls.
-        Uses first configured ticker (no hardcoding).
-        """
+        """Prime Yahoo Finance session to avoid first-call TLS stalls."""
         try:
-            warmup_ticker = "AAPL" if not self.tickers else self.tickers[0] # Hardcoded AAPL ticker
+            warmup_ticker = self.tickers[0] if self.tickers else "AAPL"
             yf.Ticker(warmup_ticker).history(period="1d")
             logger.info("Yahoo Finance session warmed up successfully")
         except Exception as exc:
             logger.warning("Yahoo warm-up failed: %s", exc)
 
-   # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
     # Public entrypoint
     # ------------------------------------------------------------------
     def run(self) -> str:
@@ -212,8 +187,7 @@ class IngestionPipeline:
             The generated run_id for this ingestion run.
         """
         stage_name = "ingestion_pipeline"
-
-        self.monitor.log_stage_start(stage_name,{"num_tickers": len(self.tickers)},)
+        self.monitor.log_stage_start(stage_name, {"num_tickers": len(self.tickers)})
 
         logger.info("Starting ingestion pipeline | run_id=%s", self.run_id)
 
@@ -221,44 +195,30 @@ class IngestionPipeline:
             self._warmup_yahoo_session()
 
             for idx, ticker in enumerate(self.tickers, start=1):
-                logger.info(
-                    "[INGEST] (%d/%d) Processing ticker=%s",
-                    idx,
-                    len(self.tickers),
-                    ticker,
-                )
-
+                logger.info("[INGEST] (%d/%d) Processing ticker=%s", idx, len(self.tickers), ticker)
                 try:
                     self._process_single_ticker(ticker)
                 except Exception as exc:
-                    # Per-ticker isolation — ingestion continues
-                    logger.error(
-                        "[INGEST] FAILED ticker=%s error=%s",
-                        ticker,
-                        str(exc),
-                        exc_info=True,
-                    )
-
+                    logger.error("[INGEST] FAILED ticker=%s error=%s", ticker, str(exc), exc_info=True)
                 time.sleep(self.sleep_time)
 
-            # Normal completion
-            self.monitor.log_stage_end(
-                stage_name,
-                {"status": "completed", "tickers": len(self.tickers)},
-            )
+            # Save used tickers for downstream pipelines
+            used_tickers_path = self.run_dir / "used_tickers.json"
+                        
+            used_tickers = {
+                "run_id": self.run_id,
+                "tickers": self.tickers,
+                "raw_root": self.data_dir,
+            }
+            with open(used_tickers_path, "w", encoding="utf-8") as fh:
+                json.dump(used_tickers, fh, indent=2)
+            logger.info("Saved used tickers: %s", used_tickers_path)
+
+            self.monitor.log_stage_end(stage_name, {"status": "completed", "tickers": self._used_tickers})
 
         except Exception as exc:
-            # Catastrophic failure (warmup, config, etc.)
-            logger.critical(
-                "Ingestion pipeline aborted | run_id=%s | error=%s",
-                self.run_id,
-                str(exc),
-                exc_info=True,
-            )
-            self.monitor.log_stage_end(
-                stage_name,
-                {"status": "failed", "error": str(exc)},
-            )
+            logger.critical("Ingestion pipeline aborted | run_id=%s | error=%s", self.run_id, str(exc), exc_info=True)
+            self.monitor.log_stage_end(stage_name, {"status": "failed", "error": str(exc)})
             raise
 
         finally:
@@ -266,5 +226,3 @@ class IngestionPipeline:
 
         logger.info("Ingestion pipeline finished successfully | run_id=%s", self.run_id)
         return self.run_id
-
-        

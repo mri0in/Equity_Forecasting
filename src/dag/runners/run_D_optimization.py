@@ -44,24 +44,10 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--config",
-        type=str,
-        required=True,
-        help="Path to D_optimization_config.yaml",
-    )
-
-    parser.add_argument(
         "--feature-root",
         type=str,
         default="datalake/data/cache/features",
         help="Root directory containing feature Parquet files",
-    )
-
-    parser.add_argument(
-        "--optimizer",
-        type=str,
-        default="optuna",
-        help="Optimizer backend (default: optuna)",
     )
 
     return parser.parse_args()
@@ -82,7 +68,6 @@ def main() -> None:
             run_id=args.run_id,
             config_path=str(config_path),
             feature_root=args.feature_root,
-            optimizer_name=args.optimizer,
         )
 
         pipeline.run()

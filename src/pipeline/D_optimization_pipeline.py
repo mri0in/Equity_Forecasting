@@ -1,44 +1,61 @@
 # src/pipeline/D_optimization_pipeline.py
 """
 D. Optimization Pipeline
------------------------
-Consumes feature datasets generated in Pipeline C and performs
-hyperparameter optimization in a run-aware, deterministic manner.
+------------------------
 
-This pipeline is strictly scoped to *searching* optimal hyperparameters
-for downstream training pipelines and does not train or persist final models.
+Performs hyperparameter optimization over feature datasets produced
+by the feature generation pipeline, scoped strictly to the ticker
+universe defined by a single ingestion run.
 
-Responsibilities:
-- Resolve tickers used in the ingestion run
-- Load per-ticker feature Parquet files
-- Execute hyperparameter optimization (e.g., Optuna)
-- Log trial parameters, metrics, and outcomes
+This pipeline is responsible only for *searching* optimal model
+hyperparameters and does not train, validate, or persist final models.
 
-Non-responsibilities:
+Contract
+--------
+- Runtime input: `run_id`
+- Ticker universe resolved from:
+      datalake/runs/{run_id}/ingestion/used_tickers.json
+- Feature inputs loaded from:
+      datalake/data/cache/features/{ticker}.parquet
+- Feature datasets must already contain a valid `target` column
+  (guaranteed upstream by Pipeline C)
+
+Responsibilities
+----------------
+- Resolve deterministic ticker universe for the run
+- Load per-ticker feature datasets
+- Split features (X) and target (y)
+- Execute hyperparameter search using a pluggable optimizer
+- Log optimization metrics and outcomes
+
+Non-responsibilities
+--------------------
 - Feature generation
-- Dataset consolidation
+- Target engineering
+- Model training
 - Walk-forward validation
-- Model training or persistence
+- Model persistence
 """
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
+import numpy as np
 import pandas as pd
 
 from src.monitoring.monitor import TrainingMonitor
-from src.optimizers import get_optimizer
+from src.optimizers.optuna_optimizer import OptunaOptimizer
 from src.utils.config import load_config
 from src.utils.logger import get_logger
 
 
 class OptimizationPipeline:
     """
-    Hyperparameter optimization pipeline operating strictly
-    on feature artifacts derived from an ingestion run.
+    Hyperparameter optimization pipeline operating on feature artifacts
+    derived from a single ingestion run.
     """
 
     def __init__(
@@ -47,16 +64,9 @@ class OptimizationPipeline:
         config_path: str,
         feature_root: str = "datalake/data/cache/features",
     ) -> None:
-        """
-        Parameters
-        ----------
-        run_id : str
-            Ingestion run identifier whose artifacts define the ticker universe.
-        config_path : str
-            Path to YAML configuration containing optimization settings.
-        feature_root : str
-            Directory containing per-ticker feature Parquet files.
-        """
+        if not run_id:
+            raise ValueError("run_id must be provided")
+
         self.run_id = run_id
         self.feature_root = Path(feature_root)
         self.config_path = config_path
@@ -65,7 +75,7 @@ class OptimizationPipeline:
         self.config: Dict = load_config(config_path)
 
         self.optim_cfg: Dict = self.config.get("optimization", {})
-        self.optimizer_name: str = self.optim_cfg.get("backend", "optuna")
+        self.n_trials: int = int(self.optim_cfg.get("n_trials", 50))
 
         self.used_tickers_path = (
             Path("datalake")
@@ -81,17 +91,18 @@ class OptimizationPipeline:
             artifact_policy="none",
         )
 
+        self.logger.info(
+            "OptimizationPipeline initialized | run_id=%s | n_trials=%d",
+            run_id,
+            self.n_trials,
+        )
+
     # ------------------------------------------------------------------
     # Internal utilities
     # ------------------------------------------------------------------
     def _load_used_tickers(self) -> List[str]:
         """
-        Load tickers used during ingestion for this run.
-
-        Returns
-        -------
-        List[str]
-            Deterministic list of tickers to optimize.
+        Load the deterministic ticker universe for this run.
         """
         if not self.used_tickers_path.exists():
             raise FileNotFoundError(
@@ -102,6 +113,9 @@ class OptimizationPipeline:
             payload = json.load(fh)
 
         tickers = payload["tickers"]
+
+        if not isinstance(tickers, list) or not tickers:
+            raise ValueError("Invalid or empty ticker list in used_tickers.json")
 
         self.logger.info(
             "[OPT] Loaded %d tickers from ingestion run",
@@ -123,11 +137,29 @@ class OptimizationPipeline:
         df = pd.read_parquet(feature_path)
 
         if df.empty:
-            raise ValueError(
-                f"Empty feature dataset for ticker={ticker}"
-            )
+            raise ValueError(f"Empty feature dataset for ticker={ticker}")
 
         return df
+
+    def _split_xy(self, df: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Split feature matrix X and target vector y.
+
+        Assumes upstream pipeline guarantees presence and correctness
+        of the `target` column.
+        """
+        if "target" not in df.columns:
+            raise ValueError("Feature dataset must contain 'target' column")
+
+        # remove columns that must not be used as inputs (target, Date) so the model does not accidentally “cheat” or break.
+        drop_cols = {"target", "Date"}
+        X = df.drop(columns=[c for c in drop_cols if c in df.columns]).values
+        y = df["target"].values
+
+        if X.size == 0 or y.size == 0:
+            raise ValueError("Invalid feature/target split")
+
+        return X, y
 
     # ------------------------------------------------------------------
     # Pipeline execution
@@ -135,23 +167,21 @@ class OptimizationPipeline:
     def run(self) -> None:
         """
         Execute hyperparameter optimization for all tickers
-        present in the ingestion run.
+        defined in the ingestion run.
         """
-        stage = "optimization_pipeline"
+        stage_name = "optimization_pipeline"
 
         self.monitor.log_stage_start(
-            stage,
+            stage_name,
             {
-                "optimizer": self.optimizer_name,
                 "run_id": self.run_id,
+                "n_trials": self.n_trials,
             },
         )
 
         self.logger.info("Starting optimization pipeline")
 
         tickers = self._load_used_tickers()
-        optimizer_fn = get_optimizer(self.optimizer_name)
-        n_trials = int(self.optim_cfg.get("n_trials", 50))
 
         for idx, ticker in enumerate(tickers, start=1):
             self.logger.info(
@@ -163,21 +193,19 @@ class OptimizationPipeline:
 
             try:
                 df = self._load_features(ticker)
+                X_train, y_train = self._split_xy(df)
 
-                self.monitor.log_stage_start(
-                    "hyperparameter_search",
-                    {
-                        "ticker": ticker,
-                        "n_trials": n_trials,
-                    },
+                optimizer = OptunaOptimizer(
+                    config=self.config,
+                    monitor=self.monitor,
+                    n_trials=self.n_trials,
                 )
 
-                optimizer_fn(
-                    config=self.config,
-                    df=df,
-                    ticker=ticker,
-                    n_trials=n_trials,
-                    monitor=self.monitor,
+                self.monitor.log_stage_start( "hyperparameter_search", { "ticker": ticker, "n_trials": self.n_trials, }, )
+
+                result = optimizer.run(
+                    X_train=X_train,
+                    y_train=y_train,
                 )
 
                 self.monitor.log_stage_end(
@@ -185,6 +213,7 @@ class OptimizationPipeline:
                     {
                         "ticker": ticker,
                         "status": "success",
+                        **result,
                     },
                 )
 
@@ -205,5 +234,5 @@ class OptimizationPipeline:
                     },
                 )
 
-        self.monitor.log_stage_end(stage, {"status": "completed"})
-        self.logger.info("Optimization pipeline completed")
+        self.monitor.log_stage_end(stage_name, {"status": "completed"})
+        self.logger.info( "Optimization pipeline completed | run_id=%s", self.run_id, )

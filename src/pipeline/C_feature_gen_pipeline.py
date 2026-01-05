@@ -1,27 +1,28 @@
-# src/pipeline/C_feature_pipeline.py
+# src/pipeline/C_feature_gen_pipeline.py
 """
 C. Feature Generation Pipeline
 ------------------------------
 
-This pipeline generates technical features from cleaned equity time-series
-data produced by the preprocessing pipeline (B).
+This pipeline enriches cleaned time-series datasets with derived features
+and a supervised learning 'target' column.
+
+The output artifacts serve as standardized inputs for downstream
+optimization, training, and inference pipelines.
 
 Contract
 --------
-- C accepts a single runtime input: `run_id`
-- From `run_id`, C resolves the canonical ingestion artifact:
-      datalake/runs/{run_id}/ingestion/used_tickers.txt
-- Only tickers listed in this file are processed
-- Cleaned inputs are read from datalake/data/cache/clean/
-- Outputs are written as per-ticker Parquet files to
-  datalake/data/cache/features/
+- Accepts a single runtime input: `run_id`
+- Resolves ticker universe from ingestion artifacts
+- Reads cleaned per-ticker datasets
+- Writes per-ticker Parquet feature datasets
 
 Responsibilities
 ---------------
-- Resolve the exact ticker universe used in the ingestion run
-- Load cleaned OHLCV CSVs
-- Generate technical indicators only (no labels, no joins)
-- Cache per-ticker's OHLCV data enriched with features in Parquet format
+- Resolve the ticker universe associated with a run
+- Load cleaned time-series inputs
+- Generate derived features
+- Generate a supervised learning target column
+- Persist enriched datasets in a columnar format
 
 """
 
@@ -30,17 +31,17 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List
 
+import json as jsonlib
 import pandas as pd
 
 from src.features.technical.build_features import FeatureBuilder
 from src.monitoring.monitor import TrainingMonitor
 from src.utils.logger import get_logger
-import json as jsonlib
 
 
 class FeaturePipeline:
     """
-    Feature generation pipeline driven strictly by ingestion run artifacts.
+    Feature and target generation pipeline driven by ingestion artifacts.
     """
 
     def __init__(
@@ -48,17 +49,37 @@ class FeaturePipeline:
         run_id: str,
         clean_root: str = "datalake/data/cache/clean",
         feature_root: str = "datalake/data/cache/features",
+        target_column: str = "Close",
+        target_horizon: int = 1,
     ) -> None:
+        """
+        Parameters
+        ----------
+        run_id : str
+            Identifier of the ingestion run.
+        clean_root : str
+            Directory containing cleaned input datasets.
+        feature_root : str
+            Directory where feature datasets will be written.
+        target_column : str
+            Base column used to construct the supervised target.
+        target_horizon : int
+            Forward shift applied to construct the target.
+        """
         if not run_id:
             raise ValueError("run_id must be provided")
+
+        if target_horizon < 1:
+            raise ValueError("target_horizon must be >= 1")
 
         self.run_id = run_id
         self.clean_root = Path(clean_root)
         self.feature_root = Path(feature_root)
+        self.target_column = target_column
+        self.target_horizon = target_horizon
 
         self.feature_root.mkdir(parents=True, exist_ok=True)
 
-        # Canonical ingestion artifact
         self.used_tickers_path = (
             Path("datalake")
             / "runs"
@@ -75,9 +96,10 @@ class FeaturePipeline:
         )
 
         self.logger.info(
-            "FeaturePipeline initialized | run_id=%s | used_tickers_path=%s",
+            "FeaturePipeline initialized | run_id=%s | target=%s | horizon=%d",
             run_id,
-            self.used_tickers_path,
+            target_column,
+            target_horizon,
         )
 
     # ------------------------------------------------------------------
@@ -85,34 +107,21 @@ class FeaturePipeline:
     # ------------------------------------------------------------------
     def _load_used_tickers(self) -> List[str]:
         """
-        Load tickers used during ingestion for this run.
-
-        Returns
-        -------
-        List[str]
-            Tickers eligible for feature generation.
-
-        Raises
-        ------
-        FileNotFoundError
-            If used_tickers.txt is missing.
+        Load tickers associated with the ingestion run.
         """
         if not self.used_tickers_path.exists():
             raise FileNotFoundError(
-                f"used_tickers.txt not found for run_id={self.run_id}"
-                f"path={self.used_tickers_path}"
+                f"used_tickers.json not found for run_id={self.run_id}"
             )
 
         with self.used_tickers_path.open("r", encoding="utf-8") as fh:
             payload = jsonlib.load(fh)
 
-        # -------- schema validation --------
-        if not isinstance(payload, dict):
-            raise ValueError("used_tickers.json must contain a JSON object")
-
         tickers = payload.get("tickers")
 
-        if not isinstance(tickers, list) or not all(isinstance(t, str) for t in tickers):
+        if not isinstance(tickers, list) or not all(
+            isinstance(t, str) for t in tickers
+        ):
             raise ValueError(
                 "Invalid used_tickers.json schema: 'tickers' must be List[str]"
             )
@@ -125,30 +134,49 @@ class FeaturePipeline:
 
     def _is_up_to_date(self, clean_path: Path, feature_path: Path) -> bool:
         """
-        Check whether feature file is newer than its cleaned input.
+        Check whether a feature file is newer than its cleaned input.
         """
         if not feature_path.exists():
             return False
 
         return feature_path.stat().st_mtime >= clean_path.stat().st_mtime
 
+    def _add_target(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Add supervised learning target column to the dataset.
+
+        Target is constructed as a forward-shifted value of the base
+        column (e.g. Close price at t + horizon).
+        """
+        if self.target_horizon < 1:
+            raise ValueError("Target horizon must be >= 1")
+
+        if self.target_column not in df.columns:
+            raise ValueError(
+                f"Target base column '{self.target_column}' not found in dataset"
+            )
+
+        df = df.copy()
+
+        df["target"] = df[self.target_column].shift(-self.target_horizon)
+
+        # Drop rows where target cannot be computed
+        df = df.dropna(subset=["target"])
+
+        return df
+
     # ------------------------------------------------------------------
     # Pipeline execution
     # ------------------------------------------------------------------
     def run(self) -> None:
         """
-        Execute feature generation for all tickers ingested in the given run.
-
-        Returns
-        -------
-        str
-            The run_id associated with this feature generation run.
+        Execute feature and target generation for all tickers in the run.
         """
         stage_name = "feature_pipeline"
 
         used_tickers = self._load_used_tickers()
 
-        self.monitor.log_stage_start(stage_name,{"num_tickers": len(used_tickers)},)
+        self.monitor.log_stage_start( stage_name, {"num_tickers": len(used_tickers)}, )
 
         self.logger.info(
             "Starting feature generation | run_id=%s | tickers=%d",
@@ -160,7 +188,12 @@ class FeaturePipeline:
             clean_path = self.clean_root / f"{ticker}.csv"
             feature_path = self.feature_root / f"{ticker}.parquet"
 
-            self.logger.info("[FEAT] (%d/%d) Processing %s", idx, len(used_tickers), ticker,)
+            self.logger.info(
+                "[FEAT] (%d/%d) Processing %s",
+                idx,
+                len(used_tickers),
+                ticker,
+            )
 
             if not clean_path.exists():
                 self.logger.error(
@@ -170,11 +203,8 @@ class FeaturePipeline:
                 )
                 continue
 
-            if self._is_up_to_date(clean_path, feature_path):
-                self.logger.info(
-                    "[FEAT] Skipping %s (features up-to-date)",
-                    ticker,
-                )
+            #if self._is_up_to_date(clean_path, feature_path):
+                self.logger.info( "[FEAT] Skipping %s (features up-to-date)", ticker, )
                 continue
 
             try:
@@ -183,23 +213,24 @@ class FeaturePipeline:
                 builder = FeatureBuilder(equity=ticker)
                 df_features = builder.build_all(df_clean)
 
-                df_features.to_parquet(feature_path, index=False, engine="pyarrow")
+                df_features = self._add_target(df_features)
 
-                self.logger.info(
-                    "[FEAT] Saved features %s rows=%d path=%s",
-                    ticker,
-                    len(df_features),
+                df_features.to_parquet(
                     feature_path,
+                    index=False,
+                    engine="pyarrow",
                 )
+
+                self.logger.info( "[FEAT] Saved features %s | rows=%d | path=%s", ticker, len(df_features), feature_path, )
 
             except Exception as exc:
                 self.logger.error(
-                    "[FEAT] Feature generation failed for %s error=%s",
+                    "[FEAT] Feature generation failed for %s | error=%s",
                     ticker,
                     str(exc),
                     exc_info=True,
                 )
 
-        self.monitor.log_stage_end(stage_name, {"status": "completed"},)
+        self.monitor.log_stage_end( stage_name, {"status": "completed"}, )
 
-        self.logger.info("Feature generation pipeline completed | run_id=%s", self.run_id,)
+        self.logger.info( "Feature generation pipeline completed | run_id=%s", self.run_id, )

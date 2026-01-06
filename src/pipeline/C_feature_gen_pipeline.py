@@ -163,7 +163,11 @@ class FeaturePipeline:
         # Drop rows where target cannot be computed
         df = df.dropna(subset=["target"])
 
+        self.logger.info("Added target column with horizon=%d", self.target_horizon)
+
         return df
+
+
 
     # ------------------------------------------------------------------
     # Pipeline execution

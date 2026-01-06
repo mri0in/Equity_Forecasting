@@ -74,7 +74,7 @@ class FeatureBuilder:
             df_volume = self._build_volume_features(df)
 
             df_features = pd.concat(
-                [df_candle, df_trend, df_momentum, df_volume],
+                [df,df_candle, df_trend, df_momentum, df_volume],
                 axis=1,
             )
 

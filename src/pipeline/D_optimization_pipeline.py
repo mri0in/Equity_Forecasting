@@ -19,6 +19,8 @@ Contract
       datalake/data/cache/features/{ticker}.parquet
 - Feature datasets must already contain a valid `target` column
   (guaranteed upstream by Pipeline C)
+- For LSTM, `model.lookback` defines the sequence length used to
+  reshape X/y prior to training or optimization.
 
 Responsibilities
 ----------------
@@ -101,9 +103,7 @@ class OptimizationPipeline:
     # Internal utilities
     # ------------------------------------------------------------------
     def _load_used_tickers(self) -> List[str]:
-        """
-        Load the deterministic ticker universe for this run.
-        """
+        """Load the deterministic ticker universe for this run."""
         if not self.used_tickers_path.exists():
             raise FileNotFoundError(
                 f"used_tickers.json not found for run_id={self.run_id}"
@@ -117,16 +117,11 @@ class OptimizationPipeline:
         if not isinstance(tickers, list) or not tickers:
             raise ValueError("Invalid or empty ticker list in used_tickers.json")
 
-        self.logger.info(
-            "[OPT] Loaded %d tickers from ingestion run",
-            len(tickers),
-        )
+        self.logger.info("[OPT] Loaded %d tickers from ingestion run", len(tickers))
         return tickers
 
     def _load_features(self, ticker: str) -> pd.DataFrame:
-        """
-        Load feature dataset for a single ticker.
-        """
+        """Load feature dataset for a single ticker."""
         feature_path = self.feature_root / f"{ticker}.parquet"
 
         if not feature_path.exists():
@@ -151,15 +146,52 @@ class OptimizationPipeline:
         if "target" not in df.columns:
             raise ValueError("Feature dataset must contain 'target' column")
 
-        # remove columns that must not be used as inputs (target, Date) so the model does not accidentally “cheat” or break.
         drop_cols = {"target", "Date"}
-        X = df.drop(columns=[c for c in drop_cols if c in df.columns]).values
-        y = df["target"].values
+        X_df = df.drop(columns=[c for c in drop_cols if c in df.columns])
+        X_df = X_df.select_dtypes(include=["number", "bool"])
+        X = X_df.astype("float32").values
+        y = df["target"].astype("float32").values
 
         if X.size == 0 or y.size == 0:
             raise ValueError("Invalid feature/target split")
 
         return X, y
+
+def _build_sequences(
+    self,
+    X: np.ndarray,
+    y: np.ndarray,
+    lookback: int,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Convert flat features into rolling sequences for sequence models.
+
+    Parameters
+    ----------
+    X : np.ndarray
+        Flat feature matrix (num_samples, num_features)
+    y : np.ndarray
+        Target vector (num_samples,)
+    lookback : int
+        Number of past timesteps to include in each sequence
+
+    Returns
+    -------
+    X_seq : np.ndarray, shape (num_samples-lookback+1, lookback, num_features)
+    y_seq : np.ndarray, shape (num_samples-lookback+1,)
+    """
+    if X.ndim != 2:
+        raise ValueError(f"Expected 2D X, got shape {X.shape}")
+    if len(X) != len(y):
+        raise ValueError("X and y length mismatch")
+    if lookback < 1:
+        raise ValueError("lookback must be >= 1")
+
+    X_seq, y_seq = [], []
+    for i in range(lookback - 1, len(X)):
+        X_seq.append(X[i - lookback + 1 : i + 1])
+        y_seq.append(y[i])
+    return np.asarray(X_seq, dtype=np.float32), np.asarray(y_seq, dtype=np.float32)
 
     # ------------------------------------------------------------------
     # Pipeline execution
@@ -170,69 +202,56 @@ class OptimizationPipeline:
         defined in the ingestion run.
         """
         stage_name = "optimization_pipeline"
-
-        self.monitor.log_stage_start(
-            stage_name,
-            {
-                "run_id": self.run_id,
-                "n_trials": self.n_trials,
-            },
-        )
-
+        self.monitor.log_stage_start(stage_name, {"run_id": self.run_id, "n_trials": self.n_trials})
         self.logger.info("Starting optimization pipeline")
 
         tickers = self._load_used_tickers()
 
         for idx, ticker in enumerate(tickers, start=1):
-            self.logger.info(
-                "[OPT] (%d/%d) Optimizing ticker=%s",
-                idx,
-                len(tickers),
-                ticker,
-            )
-
+            self.logger.info("[OPT] (%d/%d) Optimizing ticker=%s", idx, len(tickers), ticker)
             try:
                 df = self._load_features(ticker)
                 X_train, y_train = self._split_xy(df)
 
-                optimizer = OptunaOptimizer(
-                    config=self.config,
-                    monitor=self.monitor,
-                    n_trials=self.n_trials,
+                model_type = self.config.get("model", {}).get("type", "").lower()
+
+                if model_type == "lstm":
+                    lookback = int(self.config.get("model", {}).get("lookback", 1))
+
+                    # reshape for LSTM sequences
+                    X_train, y_train = self._build_sequences(X_train, y_train, lookback)
+
+                    self.logger.info(
+                        "[OPT] Reshaped data for LSTM | X=%s y=%s lookback=%d",
+                        X_train.shape,
+                        y_train.shape,
+                        lookback,
+                    )
+
+                    if X_train.ndim != 3:
+                        raise ValueError(f"LSTM requires 3D input, got shape {X_train.shape}")
+
+                self.logger.info("[OPT] Final training tensor shapes | X=%s y=%s", X_train.shape, y_train.shape)
+
+                optimizer = OptunaOptimizer(config=self.config, monitor=self.monitor, n_trials=self.n_trials)
+                self.monitor.log_stage_start(
+                    "hyperparameter_search",
+                    {"ticker": ticker, "n_trials": self.n_trials},
                 )
 
-                self.monitor.log_stage_start( "hyperparameter_search", { "ticker": ticker, "n_trials": self.n_trials, }, )
-
-                result = optimizer.run(
-                    X_train=X_train,
-                    y_train=y_train,
-                )
+                result = optimizer.run(X_train=X_train, y_train=y_train)
 
                 self.monitor.log_stage_end(
                     "hyperparameter_search",
-                    {
-                        "ticker": ticker,
-                        "status": "success",
-                        **result,
-                    },
+                    {"ticker": ticker, "status": "success", **result},
                 )
 
             except Exception as exc:
-                self.logger.error(
-                    "[OPT] Optimization failed for %s: %s",
-                    ticker,
-                    str(exc),
-                    exc_info=True,
-                )
-
+                self.logger.error("[OPT] Optimization failed for %s: %s", ticker, str(exc), exc_info=True)
                 self.monitor.log_stage_end(
                     "hyperparameter_search",
-                    {
-                        "ticker": ticker,
-                        "status": "failed",
-                        "error": str(exc),
-                    },
+                    {"ticker": ticker, "status": "failed", "error": str(exc)},
                 )
 
         self.monitor.log_stage_end(stage_name, {"status": "completed"})
-        self.logger.info( "Optimization pipeline completed | run_id=%s", self.run_id, )
+        self.logger.info("Optimization pipeline completed | run_id=%s", self.run_id)

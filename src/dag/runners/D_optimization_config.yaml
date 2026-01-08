@@ -13,6 +13,13 @@
 optimization:
 
   # ----------------------------------------------------------
+  # Model
+  # ----------------------------------------------------------
+  model:
+    type: lstm                # lstm | transformer | xgboost
+    lookback: 20              # Default static lookback; can be overridden by search_space
+
+  # ----------------------------------------------------------
   # Optimizer backend
   # ----------------------------------------------------------
   optimizer: optuna
@@ -20,35 +27,35 @@ optimization:
   # ----------------------------------------------------------
   # Search budget
   # ----------------------------------------------------------
-  n_trials: 50              # Total trials per ticker
-  timeout_sec: null         # Optional wall-clock timeout per ticker
+  n_trials: 50               # Total trials per ticker
+  timeout_sec: null          # Optional wall-clock timeout per ticker
 
   # ----------------------------------------------------------
   # Optimization objective
   # ----------------------------------------------------------
-  direction: maximize       # maximize | minimize
-  primary_metric: sharpe    # must match evaluation metric key
+  direction: minimize        # maximize | minimize
+  primary_metric: rmse       # Must match evaluation metric key returned from objective
 
   # ----------------------------------------------------------
   # Sampler & pruner (Optuna-native)
   # ----------------------------------------------------------
   sampler:
-    name: tpe               # tpe | random | cmaes
+    name: tpe                # tpe | random | cmaes
     seed: 42
 
   pruner:
-    name: median            # median | none
+    name: median             # median | none
     n_warmup_steps: 5
 
   # ----------------------------------------------------------
   # Cross-validation / splitting
   # ----------------------------------------------------------
   validation:
-    method: walk_forward    # walk_forward | holdout
+    method: walk_forward     # walk_forward | holdout
     train_ratio: 0.7
     val_ratio: 0.3
-    min_train_size: 252     # ~1 trading year
-    step_size: 21           # monthly forward step
+    min_train_size: 252      # ~1 trading year
+    step_size: 21            # monthly forward step
 
   # ----------------------------------------------------------
   # Early stopping (trial-level)
@@ -61,16 +68,17 @@ optimization:
   # ----------------------------------------------------------
   # Hyperparameter search space
   # NOTE:
-  #   These are *search domains*, not final values
+  #   These are *dynamic domains* sampled by Optuna.
+  #   Static model params (like model.type) remain outside.
   # ----------------------------------------------------------
   search_space:
 
     model:
-      lookback_window:
+      lookback_window:        # Used to reshape X/y sequences in LSTM objective
         type: int
         low: 20
-        high: 120
-        step: 5
+        high: 100
+        step: 10
 
       hidden_size:
         type: int

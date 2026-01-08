@@ -61,6 +61,8 @@ class OptunaOptimizer:
             {"trial_number": trial.number},
         )
 
+        input_size = X_train.shape[-1]
+
         learning_rate = trial.suggest_float(
             "learning_rate", 1e-5, 1e-2, log=True
         )
@@ -70,6 +72,7 @@ class OptunaOptimizer:
         model_params = self.config.get("model_params", {}).copy()
         model_params.update(
             {
+                "input_size": input_size,
                 "learning_rate": learning_rate,
                 "hidden_size": hidden_size,
                 "dropout": dropout,

@@ -242,22 +242,22 @@ class LSTMModel(BaseModel):
             predictions = outputs.cpu().numpy()
         return predictions
     
-def get_params(self) -> Dict[str, Any]:
-    """
-    Get a copy of the model's current hyperparameters.
+    def get_params(self) -> Dict[str, Any]:
+        """
+        Get a copy of the model's current hyperparameters.
 
-    Returns:
-        Dict[str, Any]: Dictionary containing model hyperparameters.
-    """
-    self.logger.debug("Fetching model parameters.")
-    return {
-        "input_size": self.input_size,
-        "hidden_size": self.hidden_size,
-        "num_layers": self.num_layers,
-        "output_size": self.output_size,
-        "dropout": self.dropout,
-        "batch_size": self.batch_size,
-        "epochs": self.epochs,
-        "learning_rate": self.learning_rate,
-        "device": str(self.device)
-    }
+        Returns:
+            Dict[str, Any]: Dictionary containing model hyperparameters.
+        """
+        self.logger.debug("Fetching model parameters.")
+        return {
+            "input_size": self.input_size,
+            "hidden_size": self.hidden_size,
+            "num_layers": self.num_layers,
+            "output_size": self.output_size,
+            "dropout": self.dropout,
+            "batch_size": self.batch_size,
+            "epochs": self.epochs,
+            "learning_rate": self.learning_rate,
+            "device": str(self.device)
+        }

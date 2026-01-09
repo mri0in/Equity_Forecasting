@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import List
 
 import json as jsonlib
+import numpy as np
 import pandas as pd
 
 from src.features.technical.build_features import FeatureBuilder
@@ -167,8 +168,45 @@ class FeaturePipeline:
 
         return df
 
+    def _sanitize_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Remove rows containing NaN or infinite values in feature columns.
 
+        Parameters
+        ----------
+        df : pd.DataFrame
+            Feature DataFrame including target column.
 
+        Returns
+        -------
+        pd.DataFrame
+            Cleaned DataFrame with invalid rows removed.
+        """
+        original_len = len(df)
+
+        # Replace inf values explicitly with NaN which can be dropped later
+        df = df.replace([np.inf, -np.inf], np.nan)
+
+        # Drop rows with any NaN
+        df_clean = df.dropna(axis=0, how="any")
+
+        removed = original_len - len(df_clean)
+
+        if removed > 0:
+            self.logger.info(
+                "[Pipeline C] Sanitized features | removed_rows=%d | remaining=%d",
+                removed,
+                len(df_clean),
+            )
+
+        if df_clean.empty:
+            raise ValueError(
+                "Feature sanitization removed all rows. "
+                "Check feature windows and data length."
+            )
+
+        return df_clean
+    
     # ------------------------------------------------------------------
     # Pipeline execution
     # ------------------------------------------------------------------
@@ -218,6 +256,9 @@ class FeaturePipeline:
                 df_features = builder.build_all(df_clean)
 
                 df_features = self._add_target(df_features)
+
+                # remove rows with NaN or infinite values
+                df_features = self._sanitize_features(df_features)
 
                 df_features.to_parquet(
                     feature_path,

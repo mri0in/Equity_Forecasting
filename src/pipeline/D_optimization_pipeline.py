@@ -77,7 +77,7 @@ class OptimizationPipeline:
         self.config: Dict = load_config(config_path)
 
         self.optim_cfg: Dict = self.config.get("optimization", {})
-        self.n_trials: int = int(self.optim_cfg.get("n_trials", 50))
+        self.n_trials: int = int(self.optim_cfg.get("n_trials", 20))
 
         self.used_tickers_path = (
             Path("datalake")
@@ -157,41 +157,41 @@ class OptimizationPipeline:
 
         return X, y
 
-def _build_sequences(
-    self,
-    X: np.ndarray,
-    y: np.ndarray,
-    lookback: int,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Convert flat features into rolling sequences for sequence models.
+    def _build_sequences(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        lookback: int,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Convert flat features into rolling sequences for sequence models.
 
-    Parameters
-    ----------
-    X : np.ndarray
-        Flat feature matrix (num_samples, num_features)
-    y : np.ndarray
-        Target vector (num_samples,)
-    lookback : int
-        Number of past timesteps to include in each sequence
+        Parameters
+        ----------
+        X : np.ndarray
+            Flat feature matrix (num_samples, num_features)
+        y : np.ndarray
+            Target vector (num_samples,)
+        lookback : int
+            Number of past timesteps to include in each sequence
 
-    Returns
-    -------
-    X_seq : np.ndarray, shape (num_samples-lookback+1, lookback, num_features)
-    y_seq : np.ndarray, shape (num_samples-lookback+1,)
-    """
-    if X.ndim != 2:
-        raise ValueError(f"Expected 2D X, got shape {X.shape}")
-    if len(X) != len(y):
-        raise ValueError("X and y length mismatch")
-    if lookback < 1:
-        raise ValueError("lookback must be >= 1")
+        Returns
+        -------
+        X_seq : np.ndarray, shape (num_samples-lookback+1, lookback, num_features)
+        y_seq : np.ndarray, shape (num_samples-lookback+1,)
+        """
+        if X.ndim != 2:
+            raise ValueError(f"Expected 2D X, got shape {X.shape}")
+        if len(X) != len(y):
+            raise ValueError("X and y length mismatch")
+        if lookback < 1:
+            raise ValueError("lookback must be >= 1")
 
-    X_seq, y_seq = [], []
-    for i in range(lookback - 1, len(X)):
-        X_seq.append(X[i - lookback + 1 : i + 1])
-        y_seq.append(y[i])
-    return np.asarray(X_seq, dtype=np.float32), np.asarray(y_seq, dtype=np.float32)
+        X_seq, y_seq = [], []
+        for i in range(lookback - 1, len(X)):
+            X_seq.append(X[i - lookback + 1 : i + 1])
+            y_seq.append(y[i])
+        return np.asarray(X_seq, dtype=np.float32), np.asarray(y_seq, dtype=np.float32)
 
     # ------------------------------------------------------------------
     # Pipeline execution
@@ -213,10 +213,11 @@ def _build_sequences(
                 df = self._load_features(ticker)
                 X_train, y_train = self._split_xy(df)
 
-                model_type = self.config.get("model", {}).get("type", "").lower()
+                model_cfg = self.optim_cfg.get("model", {})
+                model_type = model_cfg.get("type", "").lower()
 
                 if model_type == "lstm":
-                    lookback = int(self.config.get("model", {}).get("lookback", 1))
+                    lookback = int(model_cfg.get("lookback", 1))
 
                     # reshape for LSTM sequences
                     X_train, y_train = self._build_sequences(X_train, y_train, lookback)
@@ -233,11 +234,13 @@ def _build_sequences(
 
                 self.logger.info("[OPT] Final training tensor shapes | X=%s y=%s", X_train.shape, y_train.shape)
 
-                optimizer = OptunaOptimizer(config=self.config, monitor=self.monitor, n_trials=self.n_trials)
-                self.monitor.log_stage_start(
-                    "hyperparameter_search",
-                    {"ticker": ticker, "n_trials": self.n_trials},
-                )
+                optimizer = OptunaOptimizer(
+                    config=self.config, 
+                    monitor=self.monitor, 
+                    n_trials=self.n_trials
+                    )
+                
+                self.monitor.log_stage_start( "hyperparameter_search", {"ticker": ticker, "n_trials": self.n_trials}, )
 
                 result = optimizer.run(X_train=X_train, y_train=y_train)
 

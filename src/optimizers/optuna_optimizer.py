@@ -17,9 +17,6 @@ class OptunaOptimizer:
     """
     Optuna-based hyperparameter optimizer.
 
-    This optimizer is self-contained and intended to be invoked
-    directly by Pipeline D (Optimization Pipeline).
-
     Responsibilities:
     - Define Optuna objective
     - Run study
@@ -53,35 +50,53 @@ class OptunaOptimizer:
     ) -> float:
         """
         Optuna objective function.
+
+        Fully defines all model parameters here, including static
+        and sampled hyperparameters, so LSTMModel can be agnostic.
         """
 
         stage = f"optuna_trial_{trial.number}"
-        self.monitor.log_stage_start(
-            stage,
-            {"trial_number": trial.number},
-        )
+        self.monitor.log_stage_start(stage, {"trial_number": trial.number})
 
+        # ------------------------
+        # Static / fixed parameters
+        # ------------------------
         input_size = X_train.shape[-1]
+        batch_size = self.config.get("batch_size", 64)
+        epochs = self.config.get("epochs", 10)
+        num_layers = self.config.get("num_layers", 2)
+        output_size = 1             # always predicting single target
 
-        learning_rate = trial.suggest_float(
-            "learning_rate", 1e-5, 1e-2, log=True
-        )
-        hidden_size = trial.suggest_int("hidden_size", 16, 128)
-        dropout = trial.suggest_float("dropout", 0.1, 0.5)
+        # ------------------------
+        # Optuna-sampled parameters
+        # ------------------------
+        learning_rate = trial.suggest_float("learning_rate", 1e-4, 1e-2, log=True)
+        hidden_size = trial.suggest_int("hidden_size", 32, 256, step=32)
+        dropout = trial.suggest_float("dropout", 0.0, 0.3)
 
-        model_params = self.config.get("model_params", {}).copy()
-        model_params.update(
-            {
-                "input_size": input_size,
-                "learning_rate": learning_rate,
-                "hidden_size": hidden_size,
-                "dropout": dropout,
-            }
-        )
+        # ------------------------
+        # Consolidate model parameters
+        # ------------------------
+        model_params: Dict[str, Any] = {
+            "input_size": input_size,
+            "hidden_size": hidden_size,
+            "num_layers": num_layers,
+            "dropout": dropout,
+            "batch_size": batch_size,
+            "epochs": epochs,
+            "learning_rate": learning_rate,
+            "output_size": output_size,
+        }
 
+        # ------------------------
+        # Instantiate and train LSTM
+        # ------------------------
         model = LSTMModel(model_params=model_params)
         model.train(X_train, y_train)
 
+        # ------------------------
+        # Evaluate
+        # ------------------------
         y_pred = model.predict(X_train)
         rmse = float(np.sqrt(((y_train - y_pred) ** 2).mean()))
 
@@ -92,11 +107,7 @@ class OptunaOptimizer:
             model_params,
         )
 
-        self.monitor.log_stage_end(
-            stage,
-            {"rmse": rmse},
-        )
-
+        self.monitor.log_stage_end(stage, {"rmse": rmse})
         return rmse
 
     # ------------------------------------------------------------------
@@ -109,24 +120,13 @@ class OptunaOptimizer:
         y_train: np.ndarray,
     ) -> Dict[str, Any]:
         """
-        Execute Optuna optimization.
-
-        Returns
-        -------
-        Dict[str, Any]
-            Best trial summary.
+        Execute Optuna optimization and return best trial summary.
         """
 
-        self.monitor.log_stage_start(
-            "optuna_optimization",
-            {"n_trials": self.n_trials},
-        )
+        self.monitor.log_stage_start("optuna_optimization", {"n_trials": self.n_trials})
 
         study = optuna.create_study(direction="minimize")
-        study.optimize(
-            lambda t: self._objective(t, X_train, y_train),
-            n_trials=self.n_trials,
-        )
+        study.optimize(lambda t: self._objective(t, X_train, y_train), n_trials=self.n_trials)
 
         result = {
             "best_value": study.best_value,
@@ -135,10 +135,5 @@ class OptunaOptimizer:
         }
 
         logger.info("[OPTUNA] Optimization completed | %s", result)
-
-        self.monitor.log_stage_end(
-            "optuna_optimization",
-            result,
-        )
-
+        self.monitor.log_stage_end("optuna_optimization", result)
         return result

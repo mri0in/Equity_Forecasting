@@ -27,8 +27,10 @@ optimization:
   # ----------------------------------------------------------
   # Search budget
   # ----------------------------------------------------------
-  n_trials: 50               # Total trials per ticker
-  timeout_sec: null          # Optional wall-clock timeout per ticker
+  n_trials: 8                 # Total trials per ticker
+  timeout_sec: null           # Optional wall-clock timeout per ticker
+  epochs: 10                  # Max epochs per trial (for DL models)
+  batch_size: 64              # Default static batch size; can be overridden by search_space
 
   # ----------------------------------------------------------
   # Optimization objective
@@ -46,6 +48,7 @@ optimization:
   pruner:
     name: median             # median | none
     n_warmup_steps: 5
+
 
   # ----------------------------------------------------------
   # Cross-validation / splitting
@@ -72,9 +75,8 @@ optimization:
   #   Static model params (like model.type) remain outside.
   # ----------------------------------------------------------
   search_space:
-
     model:
-      lookback_window:        # Used to reshape X/y sequences in LSTM objective
+      lookback_window:
         type: int
         low: 20
         high: 100
@@ -86,15 +88,10 @@ optimization:
         high: 256
         step: 32
 
-      num_layers:
-        type: int
-        low: 1
-        high: 3
-
       dropout:
         type: float
         low: 0.0
-        high: 0.5
+        high: 0.3
 
     training:
       learning_rate:
@@ -102,15 +99,6 @@ optimization:
         low: 0.0001
         high: 0.01
         log: true
-
-      batch_size:
-        type: categorical
-        choices: [32, 64, 128]
-
-      epochs:
-        type: int
-        low: 10
-        high: 50
 
   # ----------------------------------------------------------
   # Reproducibility

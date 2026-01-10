@@ -259,6 +259,9 @@ class FeaturePipeline:
 
                 # remove rows with NaN or infinite values
                 df_features = self._sanitize_features(df_features)
+                
+                # Add equity identifier column after NaN sanitization
+                df_features["equity_id"] = ticker
 
                 df_features.to_parquet(
                     feature_path,

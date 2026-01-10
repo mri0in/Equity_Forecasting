@@ -27,9 +27,9 @@ optimization:
   # ----------------------------------------------------------
   # Search budget
   # ----------------------------------------------------------
-  n_trials: 8                 # Total trials per ticker
+  n_trials: 5                 # Total trials per ticker
   timeout_sec: null           # Optional wall-clock timeout per ticker
-  epochs: 10                  # Max epochs per trial (for DL models)
+  epochs: 6                # Max epochs per trial (for DL models)
   batch_size: 64              # Default static batch size; can be overridden by search_space
 
   # ----------------------------------------------------------

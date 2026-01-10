@@ -1,7 +1,6 @@
-# src/optimizers/optuna_optimizer.py
 from __future__ import annotations
 
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 import optuna
 import numpy as np
@@ -20,12 +19,13 @@ class OptunaOptimizer:
     Responsibilities:
     - Define Optuna objective
     - Run study
-    - Log trials and final results via TrainingMonitor
+    - Track best trained model
+    - Log trials and results via TrainingMonitor
 
     Non-responsibilities:
     - Feature generation
     - Data splitting
-    - Model persistence
+    - Model persistence (handled by pipeline)
     """
 
     def __init__(
@@ -39,6 +39,11 @@ class OptunaOptimizer:
         self.monitor = monitor
         self.n_trials = n_trials
 
+        # best-trial state
+        self.best_model: Optional[LSTMModel] = None
+        self.best_value: Optional[float] = None
+        self.best_params: Optional[Dict[str, Any]] = None
+
     # ------------------------------------------------------------------
     # Objective
     # ------------------------------------------------------------------
@@ -51,31 +56,37 @@ class OptunaOptimizer:
         """
         Optuna objective function.
 
-        Fully defines all model parameters here, including static
-        and sampled hyperparameters, so LSTMModel can be agnostic.
+        Trains an LSTM model and returns RMSE.
         """
 
         stage = f"optuna_trial_{trial.number}"
         self.monitor.log_stage_start(stage, {"trial_number": trial.number})
 
         # ------------------------
-        # Static / fixed parameters
+        # Static parameters (YAML-controlled)
         # ------------------------
         input_size = X_train.shape[-1]
-        batch_size = self.config.get("batch_size", 64)
-        epochs = self.config.get("epochs", 10)
-        num_layers = self.config.get("num_layers", 2)
-        output_size = 1             # always predicting single target
+        output_size = 1
+
+        batch_size = int(self.config.get("batch_size", 64))
+        epochs = int(self.config.get("epochs", 10))
+        num_layers = int(self.config.get("num_layers", 1))
 
         # ------------------------
         # Optuna-sampled parameters
         # ------------------------
-        learning_rate = trial.suggest_float("learning_rate", 1e-4, 1e-2, log=True)
-        hidden_size = trial.suggest_int("hidden_size", 32, 256, step=32)
-        dropout = trial.suggest_float("dropout", 0.0, 0.3)
+        learning_rate = trial.suggest_float(
+            "learning_rate", 1e-4, 1e-2, log=True
+        )
+        hidden_size = trial.suggest_int(
+            "hidden_size", 32, 256, step=32
+        )
+        dropout = trial.suggest_float(
+            "dropout", 0.0, 0.3
+        )
 
         # ------------------------
-        # Consolidate model parameters
+        # Consolidated model params
         # ------------------------
         model_params: Dict[str, Any] = {
             "input_size": input_size,
@@ -89,29 +100,43 @@ class OptunaOptimizer:
         }
 
         # ------------------------
-        # Instantiate and train LSTM
+        # Train model
         # ------------------------
         model = LSTMModel(model_params=model_params)
         model.train(X_train, y_train)
 
         # ------------------------
-        # Evaluate
+        # Evaluate (train RMSE)
         # ------------------------
         y_pred = model.predict(X_train)
-        rmse = float(np.sqrt(((y_train - y_pred) ** 2).mean()))
+        rmse = float(np.sqrt(np.mean((y_train - y_pred) ** 2)))
 
         logger.info(
-            "[OPTUNA] Trial=%d RMSE=%.6f params=%s",
+            "[OPTUNA] Trial=%d | RMSE=%.6f | params=%s",
             trial.number,
             rmse,
             model_params,
         )
 
+        # ------------------------
+        # Track best model
+        # ------------------------
+        if self.best_value is None or rmse < self.best_value:
+            self.best_value = rmse
+            self.best_params = model_params
+            self.best_model = model
+
+            logger.info(
+                "[OPTUNA] New best model | trial=%d | RMSE=%.6f",
+                trial.number,
+                rmse,
+            )
+
         self.monitor.log_stage_end(stage, {"rmse": rmse})
         return rmse
 
     # ------------------------------------------------------------------
-    # Public API (Pipeline D entrypoint)
+    # Public API
     # ------------------------------------------------------------------
     def run(
         self,
@@ -123,10 +148,16 @@ class OptunaOptimizer:
         Execute Optuna optimization and return best trial summary.
         """
 
-        self.monitor.log_stage_start("optuna_optimization", {"n_trials": self.n_trials})
+        self.monitor.log_stage_start(
+            "optuna_optimization",
+            {"n_trials": self.n_trials},
+        )
 
         study = optuna.create_study(direction="minimize")
-        study.optimize(lambda t: self._objective(t, X_train, y_train), n_trials=self.n_trials)
+        study.optimize(
+            lambda t: self._objective(t, X_train, y_train),
+            n_trials=self.n_trials,
+        )
 
         result = {
             "best_value": study.best_value,
@@ -137,3 +168,14 @@ class OptunaOptimizer:
         logger.info("[OPTUNA] Optimization completed | %s", result)
         self.monitor.log_stage_end("optuna_optimization", result)
         return result
+
+    # ------------------------------------------------------------------
+    # Accessors
+    # ------------------------------------------------------------------
+    def get_best_model(self) -> LSTMModel:
+        """
+        Return the trained best model after optimization.
+        """
+        if self.best_model is None:
+            raise RuntimeError("Best model not available. Did optimization run?")
+        return self.best_model

@@ -59,7 +59,7 @@ class OptunaOptimizer:
         Trains an LSTM model and returns RMSE.
         """
 
-        stage = f"optuna_trial_{trial.number}"
+        stage = f"optuna_trial_{trial.number}/{self.n_trials-1}"
         self.monitor.log_stage_start(stage, {"trial_number": trial.number})
 
         # ------------------------
@@ -71,7 +71,8 @@ class OptunaOptimizer:
         batch_size = int(self.config.get("batch_size", 64))
         epochs = int(self.config.get("epochs", 10))
         num_layers = int(self.config.get("num_layers", 1))
-
+        lookback = int(self.config.get("model", {}).get("lookback", 10))
+        
         # ------------------------
         # Optuna-sampled parameters
         # ------------------------
@@ -96,6 +97,7 @@ class OptunaOptimizer:
             "batch_size": batch_size,
             "epochs": epochs,
             "learning_rate": learning_rate,
+            "lookback": lookback,
             "output_size": output_size,
         }
 

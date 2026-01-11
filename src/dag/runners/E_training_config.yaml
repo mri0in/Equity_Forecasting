@@ -1,0 +1,39 @@
+# ---------------------------------------------------------
+# Pipeline E — Base Model Training (Non-LSTM)
+# ---------------------------------------------------------
+
+training:
+  scope: GLOBAL
+  visualize: false
+  flush_every: 1
+
+# ---------------------------------------------------------
+# Base models to train on pooled data from Pipeline D
+# ---------------------------------------------------------
+models:
+
+  - name: linear_regression
+    module: src.models.linear_reg
+    class: LinearRegressionModel
+    params:
+      fit_intercept: true
+
+  - name: xgboost
+    module: src.models.xgboost_model
+    class: XGBoostModel
+    params:
+      n_estimators: 300
+      max_depth: 6
+      learning_rate: 0.05
+      subsample: 0.8
+      colsample_bytree: 0.8
+      objective: reg:squarederror
+
+  - name: random_forest
+    module: src.models.random_forest_model
+    class: RandomForestModel
+    params:
+      n_estimators: 500
+      max_depth: 10
+      min_samples_split: 5
+      n_jobs: -1

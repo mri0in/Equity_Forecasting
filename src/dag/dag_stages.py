@@ -14,7 +14,7 @@ from typing import Any
 from src.pipeline import (
     D_optimization_pipeline,
     E_ensemble_pipeline,
-    F_training_pipeline,
+    E_model_trainer_pipeline,
     G_wfv_pipeline,
     H_prediction_pipeline,
     pipeline_wrapper
@@ -61,7 +61,7 @@ class PipelineStages:
         Model training stage.
         """
         logger.info("Starting training stage...")
-        F_training_pipeline.run_training_pipeline()
+        E_model_trainer_pipeline.run_training_pipeline()
         logger.info("Training stage completed.")
 
     def run_optimizer(self) -> None:

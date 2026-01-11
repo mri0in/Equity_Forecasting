@@ -31,7 +31,7 @@ In short:
 - Orchestrator → use `pipeline_wrapper`
 """
 # Bind submodules into the package namespace as *modules*
-from . import F_training_pipeline       as F_training_pipeline   # module
+from . import E_model_trainer_pipeline       as E_model_trainer_pipeline   # module
 from . import D_optimization_pipeline      as D_optimization_pipeline  # module
 from . import G_wfv_pipeline   as G_wfv_pipeline  # module
 from . import E_ensemble_pipeline       as E_ensemble_pipeline   # module
@@ -39,7 +39,7 @@ from . import H_prediction_pipeline     as H_prediction_pipeline # module
 
 
 __all__ = [
-    "F_training_pipeline",
+    "E_model_trainer_pipeline",
     "D_optimization_pipeline",
     "G_wfv_pipeline",
     "E_ensemble_pipeline",

@@ -220,18 +220,44 @@ class OptimizationPipeline:
             {"n_trials": self.n_trials, "num_equities": len(tickers)},
         )
 
+        models_dir = Path(f"datalake/runs/{self.run_id}/models/lstm")
+        models_dir.mkdir(parents=True, exist_ok=True)
+
+        model_path = models_dir / "best_model.pt"
+        params_path = models_dir / "best_params.json"
+        summary_path = Path(
+            f"datalake/runs/{self.run_id}/optimization/optimization_summary.json"
+        )
+
+
         result = optimizer.run(X_train=X_train, y_train=y_train)
 
         # --------------------------------------------------
-        # Persist best params for E pipeline
+        # Persist best model
         # --------------------------------------------------
-        best_params_path = self.optim_dir / "best_params.json"
-        best_params_path.write_text(
-            json.dumps(result.get("best_params", {}), indent=2)
+        best_model = optimizer.get_best_model()
+        best_model.save_model(model_path)
+
+        params_path.write_text(
+            json.dumps(result["best_params"], indent=2)
         )
 
-        summary_path = self.optim_dir / "study_summary.json"
-        summary_path.write_text(json.dumps(result, indent=2))
+        summary_path.write_text(
+            json.dumps(
+                {
+                    "best_trial": result["best_trial"],
+                    "best_value": result["best_value"],
+                    "n_trials": self.n_trials,
+                    "model_type": model_type,
+                },
+                indent=2,
+            )
+        )
+
+        self.logger.info(
+            "[OPT] Saved best LSTM model -> %s",
+            model_path,
+        )
 
         self.monitor.log_stage_end(
             "hyperparameter_search",
@@ -240,8 +266,11 @@ class OptimizationPipeline:
 
         self.monitor.log_stage_end(stage, {"status": "completed"})
 
+        elapsed = pd.Timestamp.now() - start_time
+        total_minutes = elapsed.total_seconds() / 60
+        
         self.logger.info(
-            "Optimization pipeline completed | run_id=%s | total_time=%s",
+            "Optimization pipeline completed | run_id=%s | total time taken=%.2f minutes",
             self.run_id,
-            pd.Timestamp.now() - start_time,
+            total_minutes,
         )

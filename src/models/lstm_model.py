@@ -65,7 +65,8 @@ class LSTMModel(BaseModel):
         self.epochs = self.model_params.get("epochs", 20)
         self.learning_rate = self.model_params.get("learning_rate", 0.001)
         self.output_size = self.model_params.get("output_size", 1)
-
+        self.lookback = self.model_params.get("lookback", 20)
+        
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.logger.info("Using device: %s", self.device)
 
@@ -250,4 +251,5 @@ class LSTMModel(BaseModel):
             "epochs": self.epochs,
             "learning_rate": self.learning_rate,
             "device": str(self.device),
+            "lookback": self.lookback,
         }

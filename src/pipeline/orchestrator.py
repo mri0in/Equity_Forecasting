@@ -19,7 +19,7 @@ import pandas as pd
 from src.pipeline import (
     D_optimization_pipeline,
     E_ensemble_pipeline,
-    F_training_pipeline,
+    E_model_trainer_pipeline,
     G_wfv_pipeline,
     H_prediction_pipeline,
 )
@@ -154,7 +154,7 @@ class PipelineOrchestrator:
                 monitor.log_stage_start(task, {"attempt": attempt + 1})
 
                 if task == "train":
-                    F_training_pipeline(self.config_path)
+                    E_model_trainer_pipeline(self.config_path)
                 elif task == "optimize":
                     D_optimization_pipeline(self.config_path)
                 elif task == "ensemble":

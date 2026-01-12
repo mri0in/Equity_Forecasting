@@ -1,0 +1,12 @@
+{
+  "AAPL": 0,
+  "MSFT": 1,
+  "GOOGL": 2,
+  "AMZN": 3,
+  "META": 4,
+  "NVDA": 5,
+  "TSLA": 6,
+  "JPM": 7,
+  "V": 8,
+  "WMT": 9
+}

@@ -1,0 +1,6 @@
+{
+  "best_trial": 2,
+  "best_value": 123.6343765258789,
+  "n_trials": 5,
+  "model_type": "lstm"
+}

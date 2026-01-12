@@ -1,0 +1,11 @@
+{
+    "input_size": 19,
+    "hidden_size": 160,
+    "num_layers": 1,
+    "dropout": 0.24508083845464407,
+    "batch_size": 64,
+    "epochs": 6,
+    "learning_rate": 0.001312462461450541,
+    "lookback": 20,
+    "output_size": 1
+}

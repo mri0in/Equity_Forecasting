@@ -1,0 +1,16 @@
+{
+  "run_id": "RUN_20251224_153655",
+  "tickers": [
+    "AAPL",
+    "MSFT",
+    "GOOGL",
+    "AMZN",
+    "META",
+    "NVDA",
+    "TSLA",
+    "JPM",
+    "V",
+    "WMT"
+  ],
+  "raw_root": "datalake/data/raw/"
+}

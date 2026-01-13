@@ -57,7 +57,7 @@ class ModelTrainerPipeline:
         # Load YAML config
         # -----------------------------
         self.config = load_config(config_path)
-        
+
         if not self.run_id:
             raise ValueError("run_id must be provided")
 
@@ -187,6 +187,9 @@ class ModelTrainerPipeline:
     # Pipeline execution
     # ------------------------------------------------------------------
     def run(self) -> None:
+
+        self.logger.info("[E] Starting modeltrainer pipeline | run_id=%s", self.run_id)
+
         self.monitor.log_stage_start(
             "E_training_pipeline",
             {"num_models": len(self.models_cfg)},
@@ -239,7 +242,7 @@ class ModelTrainerPipeline:
             json.dumps(trained_models_manifest, indent=2)
         )
 
-        logger.info("[TRN] Modeltrainer pipeline completed | Trained-model manifest saved -> %s", manifest_path)
+        logger.info("[E] Modeltrainer pipeline completed | Trained-model manifest saved -> %s", manifest_path)
         self.monitor.log_stage_end(
             "E_modeltrainer_pipeline",
             {"status": "completed"},

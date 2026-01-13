@@ -41,12 +41,14 @@ class RidgeRegressionModel(BaseModel):
     """
     Ridge Regression model for stable linear forecasting.
     """
-
     def __init__(self, model_params: Optional[dict] = None) -> None:
+        model_params = model_params or {}
+
         super().__init__(model_params)
+
         self.alpha = model_params.get("alpha", 1.0)
         self.model = Ridge(alpha=self.alpha)
-
+        
     def train(
         self,
         X: pd.DataFrame,

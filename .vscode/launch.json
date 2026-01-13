@@ -19,6 +19,24 @@
       "env": { "PYTHONPATH": "src" },
       "console": "integratedTerminal",
       "justMyCode": true
+    },
+    {
+      "name": "Run Feature Pipeline C",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "src.dag.runners.run_C_feature_gen",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      },
+      "args": [
+        "--run-id",
+        "RUN_20251224_153655"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": true
     }
+
+
   ]
 }

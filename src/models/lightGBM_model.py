@@ -43,6 +43,7 @@ class LightGBMModel(BaseModel):
     """
 
     def __init__(self, model_params: Optional[dict] = None) -> None:
+        model_params = model_params or {}
         super().__init__(model_params)
         self.params = self.model_params.get("params", {})
         self.model: Optional[lgb.LGBMRegressor] = None

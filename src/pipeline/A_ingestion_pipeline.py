@@ -189,7 +189,7 @@ class IngestionPipeline:
         stage_name = "ingestion_pipeline"
         self.monitor.log_stage_start(stage_name, {"num_tickers": len(self.tickers)})
 
-        logger.info("Starting ingestion pipeline | run_id=%s", self.run_id)
+        logger.info("[A] Starting ingestion pipeline | run_id=%s", self.run_id)
 
         try:
             self._warmup_yahoo_session()
@@ -224,5 +224,5 @@ class IngestionPipeline:
         finally:
             self.monitor.finalize()
 
-        logger.info("Ingestion pipeline finished successfully | run_id=%s", self.run_id)
+        logger.info("[A] Ingestion pipeline finished successfully | run_id=%s", self.run_id)
         return self.run_id

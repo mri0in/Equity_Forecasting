@@ -55,6 +55,7 @@ class LSTMModel(BaseModel):
     # Model initialization
     # ------------------------------------------------------------------
     def __init__(self, model_params: Optional[Dict[str, Any]] = None) -> None:
+        model_params = model_params or {}
         super().__init__(model_params)
 
         self.input_size = self.model_params.get("input_size", 1)

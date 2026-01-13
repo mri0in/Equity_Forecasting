@@ -130,6 +130,8 @@ class OptimizationPipeline:
     # ------------------------------------------------------------------
     def run(self) -> None:
         stage = "optimization_pipeline"
+        
+        self.logger.info("[D] Starting optimization pipeline | run_id=%s", self.run_id)
         self.monitor.log_stage_start(
             stage, {"run_id": self.run_id, "n_trials": self.n_trials}
         )
@@ -270,7 +272,7 @@ class OptimizationPipeline:
         total_minutes = elapsed.total_seconds() / 60
         
         self.logger.info(
-            "Optimization pipeline completed | run_id=%s | total time taken=%.2f minutes",
+            "[D] Optimization pipeline completed | run_id=%s | total time taken=%.2f minutes",
             self.run_id,
             total_minutes,
         )

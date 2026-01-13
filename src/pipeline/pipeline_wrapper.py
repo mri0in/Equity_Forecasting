@@ -12,7 +12,7 @@ from src.pipeline.A_ingestion_pipeline import IngestionPipeline
 from src.pipeline.B_preprocessing_pipeline import PreprocessingPipeline
 from src.pipeline.C_feature_gen_pipeline import FeaturePipeline
 from src.pipeline.D_optimization_pipeline import run_hyperparameter_optimization
-from src.pipeline.F_ensemble_pipeline import run_ensemble, load_ensemble_config
+from src.pipeline.F_inference_pipeline import run_ensemble, load_ensemble_config
 from src.pipeline.E_modeltrainer_pipeline import ModelTrainerPipeline
 from src.pipeline.G_wfv_pipeline import run_walk_forward_validation
 from src.pipeline.H_prediction_pipeline import run_prediction_pipeline

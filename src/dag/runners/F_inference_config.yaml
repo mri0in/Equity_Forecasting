@@ -1,0 +1,5 @@
+inference:
+  device: cpu     #cpu/cuda
+  batch_size: 512
+  dtype: float32
+  overwrite: false

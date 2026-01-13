@@ -221,7 +221,7 @@ class FeaturePipeline:
         self.monitor.log_stage_start( stage_name, {"num_tickers": len(used_tickers)}, )
 
         self.logger.info(
-            "Starting feature generation | run_id=%s | tickers=%d",
+            "[C] Starting feature generation | run_id=%s | tickers=%d",
             self.run_id,
             len(used_tickers),
         )
@@ -281,4 +281,4 @@ class FeaturePipeline:
 
         self.monitor.log_stage_end( stage_name, {"status": "completed"}, )
 
-        self.logger.info( "Feature generation pipeline completed | run_id=%s", self.run_id, )
+        self.logger.info( "[C] Feature generation pipeline completed | run_id=%s", self.run_id, )

@@ -51,6 +51,8 @@ class TCN(nn.Module):
     """
 
     def __init__( self, *, hidden_dim: int = 32, ) -> None:
+
+        
         super().__init__()
         # Kernel size = 1 → no sequence expansion or shrinkage
         # Padding = 0 → prevents broadcast mismatch
@@ -78,10 +80,9 @@ class TCNModel(BaseModel):
     """
 
     def __init__(self, model_params: Optional[dict] = None) -> None:
-        super().__init__(model_params)
-
         model_params = model_params or {}
-
+        
+        super().__init__(model_params)
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )

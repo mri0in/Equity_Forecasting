@@ -189,7 +189,7 @@ class PreprocessingPipeline:
         self.monitor.log_stage_start(stage_name,{"num_tickers": len(used_tickers)},)
 
         self.logger.info(
-            "Starting preprocessing | run_id=%s | tickers=%d", self.run_id,len(used_tickers), )
+            "[B] Starting preprocessing pipeline | run_id=%s | tickers=%d", self.run_id,len(used_tickers), )
 
         for idx, ticker in enumerate(used_tickers, start=1):
             raw_path = self.raw_root /f"{ticker}.csv"
@@ -233,5 +233,5 @@ class PreprocessingPipeline:
 
         self.monitor.log_stage_end(stage_name,{"status": "completed"},)
 
-        self.logger.info("Preprocessing pipeline completed | run_id=%s",self.run_id,)
+        self.logger.info("[B] Preprocessing pipeline completed | run_id=%s",self.run_id,)
         

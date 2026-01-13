@@ -42,7 +42,10 @@ class ElasticNetModel(BaseModel):
     """
 
     def __init__(self, model_params: Optional[dict] = None) -> None:
+        model_params = model_params or {}
+
         super().__init__(model_params)
+
         self.alpha = model_params.get("alpha", 1.0)
         self.l1_ratio = model_params.get("l1_ratio", 0.5)
         self.model = ElasticNet(

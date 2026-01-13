@@ -31,6 +31,7 @@ import yaml
 
 from src.monitoring.monitor import TrainingMonitor
 from src.utils.logger import get_logger
+from src.utils.model_utils import load_config
 
 logger = get_logger(__name__)
 
@@ -55,9 +56,8 @@ class ModelTrainerPipeline:
         # -----------------------------
         # Load YAML config
         # -----------------------------
-        with open(self.config_path, "r") as fh:
-            self.config: Dict = yaml.safe_load(fh)
-
+        self.config = load_config(config_path)
+        
         if not self.run_id:
             raise ValueError("run_id must be provided")
 

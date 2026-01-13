@@ -1,23 +1,34 @@
-# src/pipeline/E_ensemble_pipeline.py """ Ensemble Pipeline (E).
+# src/pipeline/F_ensemble_pipeline.py
 """
-- Consumes predictions from base models (D or F)
-- Applies mean / weighted / median / stacked ensemble
-- Evaluates ensemble predictions
-- Saves all artifacts under runtime `run_id`:
-  run_id/
-    └─ ensemble/
-        ├─ oof/
-        ├─ meta/
-        └─ predictions/ 
+Pipeline F — Ensemble & Meta-Modeling
+
+Responsibilities
+----------------
+- Consume base-model predictions from Pipeline E
+- Apply simple ensemble strategies (mean / weighted / median)
+- Optionally perform stacked ensembling (OOF → meta-features → meta-model)
+- Persist ensemble artifacts under the SAME run_id
+
+Directory Layout
+----------------
+datalake/runs/{run_id}/ensemble/
+├── predictions/
+├── oof/
+└── meta/
 """
-import os
-from datetime import datetime, timezone
-from typing import Dict, List 
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Dict, List
+
 import numpy as np
 import yaml
 
-from src.utils.logger import get_logger
 from src.monitoring.monitor import TrainingMonitor
+from src.utils.config import load_config
+from src.utils.logger import get_logger
 from src.ensemble.simple_ensembler import SimpleEnsembler
 from src.ensemble.generate_oof import OOFGenerator
 from src.ensemble.meta_features import MetaFeaturesBuilder
@@ -26,160 +37,244 @@ from src.training.evaluate import compute_metrics
 
 logger = get_logger(__name__)
 
-# ------------------------------
-# Helper to load predictions
-# ------------------------------
-def _load_pred_arrays(paths: List[str], monitor: TrainingMonitor) -> List[np.ndarray]:
-    monitor.log_stage_start("load_pred_arrays", {"num_paths": len(paths)})
-    try:
-        preds = [np.load(p) for p in paths]
-        logger.info("Loaded %d prediction arrays", len(preds))
-        monitor.log_stage_end("load_pred_arrays", {"status": "success"})
+
+class EnsemblePipeline:
+    """
+    Pipeline F — Ensemble & Meta-Modeling
+    """
+
+    # ------------------------------------------------------------------
+    # Initialization
+    # ------------------------------------------------------------------
+    def __init__(self, *, run_id: str, config_path: str) -> None:
+        if not run_id:
+            raise ValueError("run_id must be provided")
+
+        self.run_id = run_id
+        self.config_path = Path(config_path)
+
+        if not self.config_path.exists():
+            raise FileNotFoundError(f"Config not found: {self.config_path}")
+
+        # -----------------------------
+        # Load config
+        # -----------------------------
+        self.config = load_config(config_path)
+
+        self.ensemble_cfg = self.config.get("ensemble", {})
+
+        # -----------------------------
+        # Run directories (strict lineage)
+        # -----------------------------
+        self.base_run_dir = Path("datalake") / "runs" / self.run_id
+        self.ensemble_dir = self.base_run_dir / "ensemble"
+        self.pred_dir = self.ensemble_dir / "predictions"
+        self.oof_dir = self.ensemble_dir / "oof"
+        self.meta_dir = self.ensemble_dir / "meta"
+
+        for d in [self.ensemble_dir, self.pred_dir, self.oof_dir, self.meta_dir]:
+            d.mkdir(parents=True, exist_ok=True)
+
+        # -----------------------------
+        # Monitoring
+        # -----------------------------
+        self.monitor = TrainingMonitor(
+            run_id=self.run_id,
+            save_dir=self.ensemble_dir,
+            artifact_policy="none",
+            enable_plots=False,
+        )
+
+        logger.info(
+            "Initialized Pipeline F | run_id=%s | method=%s",
+            self.run_id,
+            self.ensemble_cfg.get("method", "mean"),
+        )
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+    def _load_predictions(self, paths: List[Path]) -> List[np.ndarray]:
+        self.monitor.log_stage_start(
+            "load_predictions", {"num_paths": len(paths)}
+        )
+
+        preds: List[np.ndarray] = []
+        for p in paths:
+            if not p.exists():
+                raise FileNotFoundError(f"Prediction file missing: {p}")
+            preds.append(np.load(p))
+
+        # -----------------------------
+        # Shape safety
+        # -----------------------------
+        base_shape = preds[0].shape
+        for i, arr in enumerate(preds):
+            if arr.shape != base_shape:
+                raise ValueError(
+                    f"Prediction shape mismatch at index {i}: "
+                    f"{arr.shape} vs {base_shape}"
+                )
+
+        self.monitor.log_stage_end("load_predictions", {"status": "success"})
         return preds
-    except Exception as e:
-        monitor.log_stage_end("load_pred_arrays", {"status": "failed", "error": str(e)})
-        raise
 
-# ------------------------------
-# Main Ensemble Runner
-# ------------------------------
-def run_ensemble(config_path: str) -> Dict[str, float]:
-    if not config_path:
-        raise ValueError("config_path must be provided")
+    # ------------------------------------------------------------------
+    # Pipeline execution
+    # ------------------------------------------------------------------
+    def run(self) -> Dict[str, float]:
+        method = self.ensemble_cfg.get("method", "mean").lower()
+        metrics = self.ensemble_cfg.get("metrics", ["rmse", "mae"])
 
-    with open(config_path, "r") as f:
-        config: Dict = yaml.safe_load(f)
+        logger.info("[ENS] Running Pipeline F | method=%s", method)
+        self.monitor.log_stage_start("F_ensemble_pipeline", {"method": method})
 
-    ensemble_cfg = config.get("ensemble", {})
-    train_cfg = config.get("training", {})
+        # ==============================================================
+        # Simple Ensembles
+        # ==============================================================
+        if method in {"mean", "median", "weighted"}:
+            pred_paths = [
+                Path(p) for p in self.ensemble_cfg.get("pred_paths", [])
+            ]
+            if not pred_paths:
+                raise ValueError("ensemble.pred_paths must be provided")
 
-    # ------------------------------
-    # runtime identifiers
-    # ------------------------------
-    scope = train_cfg.get("scope", "GLOBAL")
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    run_id = f"{scope}_ENSEMBLE_{timestamp}"
-    run_dir = os.path.join(ensemble_cfg.get("run_dir", "runs/ensemble"), run_id)
-    os.makedirs(run_dir, exist_ok=True)
+            y_true_path = Path(self.ensemble_cfg["y_true_path"])
+            if not y_true_path.exists():
+                raise FileNotFoundError(f"y_true not found: {y_true_path}")
 
-    monitor = TrainingMonitor(
-        run_id=run_id,
-        save_dir=run_dir,
-        visualize=False,
-        flush_every=int(ensemble_cfg.get("flush_every", 1)),
-    )
+            preds = self._load_predictions(pred_paths)
+            ensembler = SimpleEnsembler(predictions=preds)
 
-    method = ensemble_cfg.get("method", "mean").lower()
-    logger.info("Running ensemble method: %s", method)
-    monitor.log_stage_start("run_ensemble", {"method": method, "config_path": config_path})
+            self.monitor.log_stage_start("ensemble_prediction_generation")
 
-    # ===============================
-    # Simple / Weighted / Median
-    # ===============================
-    if method in {"mean", "weighted", "median"}:
-        pred_paths: List[str] = ensemble_cfg.get("pred_paths", [])
-        if not pred_paths:
-            raise ValueError("ensemble.pred_paths must be provided")
+            if method == "weighted":
+                weights = self.ensemble_cfg.get("weights")
+                if not weights:
+                    raise ValueError("weights must be provided for weighted ensemble")
 
-        y_true_path: str = ensemble_cfg["y_true_path"]
-        metrics: List[str] = ensemble_cfg.get("metrics", ["rmse", "mae"])
+                if len(weights) != len(preds):
+                    raise ValueError(
+                        "weights length must match number of models"
+                    )
 
-        preds = _load_pred_arrays(pred_paths, monitor)
-        ensembler = SimpleEnsembler(predictions=preds)
+                y_pred = ensembler.ensemble_predictions(
+                    method="weighted",
+                    weights=weights,
+                )
+            else:
+                y_pred = ensembler.ensemble_predictions(method)
 
-        monitor.log_stage_start("ensemble_predictions", {"method": method})
-        if method == "weighted":
-            weights: List[float] = ensemble_cfg["weights"]
-            y_pred = ensembler.ensemble_predictions("weighted", weights=weights)
-        elif method == "median":
-            y_pred = ensembler.ensemble_predictions("median")
+            self.monitor.log_stage_end(
+                "ensemble_prediction_generation", {"status": "success"}
+            )
+
+            # -----------------------------
+            # Save predictions
+            # -----------------------------
+            pred_out_path = self.pred_dir / f"{method}_ensemble.npy"
+            np.save(pred_out_path, y_pred)
+
+            # -----------------------------
+            # Evaluation
+            # -----------------------------
+            y_true = np.load(y_true_path)
+            results = compute_metrics(y_true, y_pred, metrics)
+
+            # -----------------------------
+            # Persist summary
+            # -----------------------------
+            summary = {
+                "run_id": self.run_id,
+                "method": method,
+                "models": [p.name for p in pred_paths],
+                "metrics": results,
+            }
+
+            (self.ensemble_dir / "ensemble_summary.json").write_text(
+                json.dumps(summary, indent=2)
+            )
+
+            logger.info("[ENS] Pipeline F completed | results=%s", results)
+            self.monitor.log_stage_end(
+                "F_ensemble_pipeline", {"status": "completed"}
+            )
+            return results
+
+        # ==============================================================
+        # Stacked Ensemble
+        # ==============================================================
+        elif method == "stacked":
+            self.monitor.log_stage_start("stacked_ensemble")
+
+            oof_cfg = self.ensemble_cfg.get("oof", {})
+            X_path = Path(oof_cfg["X_path"])
+            y_path = Path(oof_cfg["y_path"])
+            n_splits = int(oof_cfg.get("n_splits", 5))
+            model_params = oof_cfg.get("model_params", {})
+
+            gen = OOFGenerator(
+                model_params=model_params,
+                n_splits=n_splits,
+            )
+
+            X, y = gen.load_data(X_path, y_path)
+            oof_preds, oof_targets = gen.generate(X, y)
+
+            oof_preds_path = self.oof_dir / "oof_preds.npy"
+            oof_targets_path = self.oof_dir / "oof_targets.npy"
+
+            np.save(oof_preds_path, oof_preds)
+            np.save(oof_targets_path, oof_targets)
+
+            # -----------------------------
+            # Meta-features
+            # -----------------------------
+            mf_cfg = self.ensemble_cfg.get("meta_features", {})
+            meta_csv_path = self.meta_dir / "meta_features.csv"
+
+            mf_builder = MetaFeaturesBuilder(
+                oof_preds_path=oof_preds_path,
+                oof_targets_path=oof_targets_path,
+                feature_paths=mf_cfg.get("feature_paths", []),
+            )
+
+            self.monitor.log_stage_start("meta_feature_construction")
+            mf_builder.build(save_path=meta_csv_path)
+            self.monitor.log_stage_end(
+                "meta_feature_construction", {"status": "success"}
+            )
+
+            # -----------------------------
+            # Meta-model
+            # -----------------------------
+            mm_cfg = self.ensemble_cfg.get("meta_model", {})
+            model_save_path = self.meta_dir / "meta_model.pkl"
+
+            trainer = MetaFeatureTrainer(
+                data_path=meta_csv_path,
+                test_size=float(mm_cfg.get("test_size", 0.2)),
+                random_state=int(mm_cfg.get("random_state", 42)),
+                model_params=mm_cfg.get("params", {}),
+            )
+
+            self.monitor.log_stage_start("meta_model_training")
+            X_train, y_train, X_val, y_val = trainer.prepare_datasets()
+            trainer.train_model(X_train, y_train, X_val, y_val)
+            results = trainer.evaluate(X_val, y_val)
+            trainer.save_model(model_save_path)
+            self.monitor.log_stage_end(
+                "meta_model_training", {"status": "success"}
+            )
+
+            logger.info("Pipeline F (stacked) completed | results=%s", results)
+            self.monitor.log_stage_end(
+                "F_ensemble_pipeline", {"status": "completed"}
+            )
+            return results
+
+        # ==============================================================
+        # Unsupported
+        # ==============================================================
         else:
-            y_pred = ensembler.ensemble_predictions("mean")
-        monitor.log_stage_end("ensemble_predictions", {"status": "success"})
-
-        # ------------------------------
-        # Save ensemble predictions
-        # ------------------------------
-        pred_dir = os.path.join(run_dir, "ensemble", "predictions")
-        os.makedirs(pred_dir, exist_ok=True)
-        pred_path = os.path.join(pred_dir, f"{method}_ensemble.npy")
-        np.save(pred_path, y_pred)
-        logger.info("Saved ensemble predictions to %s", pred_path)
-
-        y_true = np.load(y_true_path)
-        results = compute_metrics(y_true, y_pred, metrics)
-
-        logger.info("%s ensemble evaluation: %s", method.capitalize(), results)
-        monitor.log_stage_end("run_ensemble", {"status": "completed"})
-        return results
-
-    # ===============================
-    # Stacked Ensemble (OOF → Meta → Meta-model)
-    # ===============================
-    elif method == "stacked":
-        monitor.log_stage_start("stacked_ensemble_pipeline")
-
-        oof_cfg = ensemble_cfg.get("oof", {})
-        X_path = oof_cfg["X_path"]
-        y_path = oof_cfg["y_path"]
-        n_splits = int(oof_cfg.get("n_splits", 5))
-        model_params = oof_cfg.get("model_params", {})
-
-        oof_out_dir = os.path.join(run_dir, "ensemble", "oof")
-        os.makedirs(oof_out_dir, exist_ok=True)
-
-        gen = OOFGenerator(model_params=model_params, n_splits=n_splits)
-        X, y = gen.load_data(X_path, y_path)
-        oof_preds, oof_targets = gen.generate(X, y)
-
-        oof_preds_path = os.path.join(oof_out_dir, "oof_preds.npy")
-        oof_targets_path = os.path.join(oof_out_dir, "oof_targets.npy")
-        np.save(oof_preds_path, oof_preds)
-        np.save(oof_targets_path, oof_targets)
-        logger.info("Saved OOF arrays to %s", oof_out_dir)
-
-        # ------------------------------
-        # Meta-features
-        # ------------------------------
-        mf_cfg = ensemble_cfg.get("meta_features", {})
-        meta_csv_path = os.path.join(run_dir, "ensemble", "meta", "meta_features.csv")
-        os.makedirs(os.path.dirname(meta_csv_path), exist_ok=True)
-
-        mf_builder = MetaFeaturesBuilder(
-            oof_preds_path=oof_preds_path,
-            oof_targets_path=oof_targets_path,
-            feature_paths=mf_cfg.get("feature_paths", []),
-        )
-        monitor.log_stage_start("build_meta_features")
-        mf_builder.build(save_path=meta_csv_path)
-        monitor.log_stage_end("build_meta_features", {"status": "success"})
-
-        # ------------------------------
-        # Meta-model
-        # ------------------------------
-        mm_cfg = ensemble_cfg.get("meta_model", {})
-        model_save_path = os.path.join(run_dir, "ensemble", "meta", "meta_model.pkl")
-        os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
-
-        trainer = MetaFeatureTrainer(
-            data_path=meta_csv_path,
-            test_size=float(mm_cfg.get("test_size", 0.2)),
-            random_state=int(mm_cfg.get("random_state", 42)),
-            model_params=mm_cfg.get("params"),
-        )
-
-        monitor.log_stage_start("train_meta_model")
-        X_train, y_train, X_val, y_val = trainer.prepare_datasets()
-        trainer.train_model(X_train, y_train, X_val, y_val)
-        results = trainer.evaluate(X_val, y_val)
-        trainer.save_model(model_save_path)
-        monitor.log_stage_end("train_meta_model", {"status": "success"})
-
-        logger.info("Stacked ensemble evaluation: %s", results)
-        monitor.log_stage_end("stacked_ensemble_pipeline", {"status": "completed"})
-        monitor.log_stage_end("run_ensemble", {"status": "completed"})
-        return results
-
-    else:
-        monitor.log_stage_end("run_ensemble", {"status": "failed", "error": f"Unsupported method: {method}"})
-        raise ValueError(f"Unsupported ensemble method: {method}")
+            raise ValueError(f"Unsupported ensemble method: {method}")

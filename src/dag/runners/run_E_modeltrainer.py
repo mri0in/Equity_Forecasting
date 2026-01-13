@@ -1,5 +1,5 @@
 """
-CLI runner for Pipeline E — Single Model Training.
+CLI runner for Pipeline E Model Training.
 
 """
 
@@ -9,8 +9,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from src.pipeline.E_model_trainer_pipeline import ModelTrainerPipeline
-from src.utils.logger import get_logger
+from src.pipeline.E_modeltrainer_pipeline import ModelTrainerPipeline
 
 
 

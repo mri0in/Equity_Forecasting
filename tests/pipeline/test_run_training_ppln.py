@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 from unittest.mock import patch, MagicMock
-from src.pipeline.E_model_trainer_pipeline import ModelTrainerPipeline, run_training_pipeline
+from src.pipeline.E_modeltrainer_pipeline import ModelTrainerPipeline, run_training_pipeline
 
 def test_load_training_data_success(tmp_path, monkeypatch):
     # Prepare fake data files

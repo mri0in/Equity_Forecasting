@@ -1,0 +1,37 @@
+# ---------------------------------------------------------
+# Pipeline E — Base Model Training (Non-LSTM)
+# ---------------------------------------------------------
+training:
+  visualize: false
+  flush_every: 1
+
+  models:
+    ridge:
+      module: src.models.ridge_regg_model
+      class: RidgeRegressionModel
+      params:
+        alpha: 1.0
+        fit_intercept: true
+
+    elastic_net:
+      module: src.models.elastic_net_model
+      class: ElasticNetModel
+      params:
+        alpha: 0.1
+        l1_ratio: 0.5
+
+    lightgbm:
+      module: src.models.lightGBM_model
+      class: LightGBMModel
+      params:
+        num_leaves: 31
+        learning_rate: 0.05
+        n_estimators: 300
+
+    tcn:
+      module: src.models.tcn_model
+      class: TCNModel
+      params:
+        num_channels: [32, 32]
+        kernel_size: 3
+        dropout: 0.1

@@ -29,13 +29,13 @@ In short:
 - Tests & direct imports → use these modules and it's classes/functions directly 
 -  such as(ModelTrainerPipeline for run_training.py).
 - Orchestrator → use `pipeline_wrapper`
-"""
+
 # Bind submodules into the package namespace as *modules*
-from . import E_model_trainer_pipeline       as E_model_trainer_pipeline   # module
-from . import D_optimization_pipeline      as D_optimization_pipeline  # module
-from . import G_wfv_pipeline   as G_wfv_pipeline  # module
-from . import E_ensemble_pipeline       as E_ensemble_pipeline   # module
-from . import H_prediction_pipeline     as H_prediction_pipeline # module
+from . import E_model_trainer_pipeline          as E_model_trainer_pipeline   # module
+from . import D_optimization_pipeline           as D_optimization_pipeline  # module
+from . import G_wfv_pipeline                    as G_wfv_pipeline  # module
+from . import F_ensemble_pipeline               as F_ensemble_pipeline   # module
+from . import H_prediction_pipeline             as H_prediction_pipeline # module
 
 
 __all__ = [
@@ -45,3 +45,4 @@ __all__ = [
     "E_ensemble_pipeline",
     "H_prediction_pipeline",
 ]
+"""

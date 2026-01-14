@@ -1,0 +1,80 @@
+walk_forward:
+  # ------------------------------------------------------------------
+  # Minimum number of observations required before the first validation
+  # window is evaluated.
+  #
+  # Purpose:
+  # - Ensures models have sufficient historical context before scoring.
+  # - Too small → noisy, unstable metrics.
+  # - Too large → too few validation windows.
+  #
+  # Current phase (bootstrap / CPU / ~10 equities):
+  # - Set lower to allow multiple walk-forward splits.
+  #
+  min_train_size: 1000
+
+
+  # ------------------------------------------------------------------
+  # Size of each validation window (number of observations).
+  #
+  # Purpose:
+  # - Defines how many future points are used to evaluate performance
+  #   at each walk-forward step.
+  # - Larger windows reduce variance but reduce temporal resolution.
+  #
+  # Constraint:
+  # - Must be > 0
+  # - Must be < total dataset size - min_train_size
+  #
+  val_size: 200
+
+
+  # ------------------------------------------------------------------
+  # Step size between consecutive walk-forward windows.
+  #
+  # Purpose:
+  # - Controls how far the window advances each iteration.
+  # - Smaller step → more overlap → smoother stability estimates.
+  # - Larger step → fewer evaluations, higher variance.
+  #
+  # Best practice:
+  # - Typically equal to or slightly smaller than val_size.
+  #
+  step_size: 200
+
+
+  # ------------------------------------------------------------------
+  # Maximum allowable mean RMSE across all walk-forward windows
+  # for a model to be considered eligible.
+  #
+  # Purpose:
+  # - Enforces absolute performance quality.
+  # - Acts as the first hard gate before stability is considered.
+  #
+  # Interpretation:
+  # - Model must be "good on average", not just occasionally.
+  #
+  # Bootstrap phase note:
+  # - Relaxed relative to production due to limited scale.
+  #
+  max_mean_rmse: 2.5 #0.08
+
+
+  # ------------------------------------------------------------------
+  # Minimum required stability score for eligibility.
+  #
+  # Stability score definition:
+  #   stability_score = 1 / (1 + std_rmse)
+  #
+  # Purpose:
+  # - Penalizes models with high variance across time.
+  # - Explicitly discourages temporally unstable models.
+  #
+  # Interpretation:
+  # - Higher is better.
+  # - Values close to 1 imply very stable performance.
+  #
+  # Bootstrap phase note:
+  # - Lowered to allow moderately volatile but useful models.
+  #
+  min_stability_score: 0.38 #0.35

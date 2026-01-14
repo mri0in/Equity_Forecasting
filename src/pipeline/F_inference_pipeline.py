@@ -6,7 +6,7 @@ Purpose
 Runs inference using trained global models produced by Pipeline E
 on the pooled dataset (X_pooled.parquet).
 
-Contracts (STRICT)
+Contracts 
 ------------------
 1. Consumes:
    - runs/{run_id}/dataset/X_pooled.parquet
@@ -146,8 +146,10 @@ class InferencePipeline:
 
             module = importlib.import_module(module)
             model_cls = getattr(module, class_name)
-            model = model_cls.load_model(Path(artifact_path))
+            model = model_cls() 
+            model.load_model(artifact_path)
 
+    
             y_pred = model.predict(X) 
             pred_path = self.pred_dir / f"{name}_preds.npy"
 

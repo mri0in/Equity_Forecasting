@@ -16,7 +16,7 @@ from src.pipeline import (
     E_ensemble_pipeline,
     E_modeltrainer_pipeline,
     G_wfv_pipeline,
-    H_prediction_pipeline,
+    H_ensemble_pipeline,
     pipeline_wrapper
 )
 
@@ -93,5 +93,5 @@ class PipelineStages:
         Forecasting stage: generate predictions for a given equity.
         """
         logger.info("Starting forecasting stage...")
-        H_prediction_pipeline.run_prediction_pipeline()
+        H_ensemble_pipeline.run_prediction_pipeline()
         logger.info("Forecasting stage completed.")

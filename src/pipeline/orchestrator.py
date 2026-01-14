@@ -21,7 +21,7 @@ from src.pipeline import (
     E_ensemble_pipeline,
     E_modeltrainer_pipeline,
     G_wfv_pipeline,
-    H_prediction_pipeline,
+    H_ensemble_pipeline,
 )
 from src.utils.config_loader import load_typed_config, FullConfig
 
@@ -160,7 +160,7 @@ class PipelineOrchestrator:
                 elif task == "ensemble":
                     E_ensemble_pipeline(self.config_path)
                 elif task == "predict":
-                    H_prediction_pipeline(self.config_path)
+                    H_ensemble_pipeline(self.config_path)
                 elif task == "walkforward":
                     G_wfv_pipeline(self.config_path)
                 else:

@@ -1,121 +1,241 @@
 # src/pipeline/G_wfv_pipeline.py
 
 """
-Module to orchestrate walk-forward validation for equity forecasting models.
+Pipeline G — Walk-Forward Validation (WFV)
 
-This module loads configuration, runs walk-forward validation using the
-WalkForwardValidator class, and logs summarized results.
+Purpose
+-------
+Pipeline G performs temporal robustness validation of trained global models
+using walk-forward (rolling / expanding window) evaluation on pooled equity data.
 
-⚠️ IMPORTANT WARNING:
-Do NOT call these functions/classes directly.
-Use wrapper functions in src/pipeline/pipeline_wrapper.py
-to enforce orchestration, logging, retries, and task markers.
+This pipeline exists to ensure that only models with stable, regime-robust
+performance are allowed to influence downstream global signals and adapters.
 """
+import json
+import os
+from pathlib import Path
+from typing import Dict, List, Tuple
 
-from datetime import datetime, timezone
-from typing import Dict, Any
+import numpy as np
+import pandas as pd
 
-from src.training.walk_forward_validator import WalkForwardValidator
 from src.utils.logger import get_logger
-from src.utils.config import load_config
-from src.monitoring.monitor import TrainingMonitor
+from src.utils.model_utils import load_config
+from src.training.evaluate import compute_metrics
 
 logger = get_logger(__name__)
 
 
-def run_walk_forward_validation(config_path: str) -> Dict[str, Any]:
+class WalkForwardValidationPipeline:
     """
-    Perform walk-forward validation based on provided config file.
+    Pipeline G — Walk-Forward Validation
 
-    Args:
-        config_path (str): Path to the YAML configuration file
-
-    Returns:
-        Dict[str, Any]: Aggregated validation results
+    Validates temporal robustness of trained global models using
+    rolling / expanding windows on pooled equity data.
     """
-    if not config_path:
-        raise ValueError("config_path must be provided")
 
-    # -------------------------------------------------
-    # Load config
-    # -------------------------------------------------
-    config = load_config(config_path)
-    train_cfg = config.get("training", {})
+    def __init__(self, run_id: str, config_path: str) -> None:
+        if not run_id:
+            raise ValueError("run_id must be provided")
+        if not config_path:
+            raise ValueError("config_path must be provided")
 
-    # -------------------------------------------------
-    # Run identity
-    # -------------------------------------------------
-    scope = train_cfg.get("scope", "GLOBAL")
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    run_id = f"{scope}_WALKFWD_{timestamp}"
+        self.run_id = run_id
+        self.config = load_config(config_path)
 
-    base_run_dir = train_cfg.get("run_dir", "runs/walk_forward")
-    run_dir = f"{base_run_dir}/{run_id}"
+        self.base_run_dir = Path("datalake") / "runs" / self.run_id
+        self.dataset_dir = self.base_run_dir / "dataset"
+        self.training_dir = self.base_run_dir / "training"
+        self.output_dir = self.base_run_dir / "walk_forward"
 
-    # -------------------------------------------------
-    # Runtime monitor (CORRECT)
-    # -------------------------------------------------
-    monitor = TrainingMonitor(
-        run_id=run_id,
-        save_dir=run_dir,
-        visualize=False,
-        flush_every=int(train_cfg.get("flush_every", 1)),
-    )
+        os.makedirs(self.output_dir, exist_ok=True)
 
-    monitor.log_stage_start(
-        "run_walk_forward_validation",
-        {"config_path": config_path, "run_id": run_id},
-    )
+        self.logger = logger
 
-    logger.info(
-        "Starting walk-forward validation | run_id=%s | config=%s",
-        run_id,
-        config_path,
-    )
+    # ------------------------------------------------------------------
+    # Data loading
+    # ------------------------------------------------------------------
+    def _load_dataset(self) -> Tuple[np.ndarray, np.ndarray]:
+        X_path = self.dataset_dir / "X_pooled.parquet"
+        y_path = self.dataset_dir / "y_pooled.parquet"
 
-    # -------------------------------------------------
-    # Extract early stopping config
-    # -------------------------------------------------
-    early_stopping_cfg = config.get("early_stopping")
+        if not X_path.exists():
+            raise FileNotFoundError(f"Missing {X_path}")
+        if not y_path.exists():
+            raise FileNotFoundError(f"Missing {y_path}")
 
-    # -------------------------------------------------
-    # Initialize validator
-    # -------------------------------------------------
-    monitor.log_stage_start("initialize_validator")
-    wfv = WalkForwardValidator(
-        config=config,
-        early_stopping=early_stopping_cfg,
-    )
-    monitor.log_stage_end("initialize_validator", {"status": "success"})
+        X = pd.read_parquet(X_path).values
+        y = pd.read_parquet(y_path).values.ravel()
 
-    # -------------------------------------------------
-    # Run validation
-    # -------------------------------------------------
-    monitor.log_stage_start("run_validation")
-    results = wfv.run_validation()
-    monitor.log_stage_end("run_validation", {"status": "success"})
+        if len(X) != len(y):
+            raise ValueError("X and y length mismatch")
 
-    # -------------------------------------------------
-    # Log summarized metrics
-    # -------------------------------------------------
-    summary = results.get("summary", {})
-    monitor.log_stage_start(
-        "log_results_summary",
-        {"num_metrics": len(summary)},
-    )
+        self.logger.info("Loaded pooled dataset: X=%s y=%s", X.shape, y.shape)
+        return X, y
 
-    for metric, value in summary.items():
-        logger.info(
-            "Walk-forward metric | %s = %.4f",
-            metric,
-            value,
+    # ------------------------------------------------------------------
+    # Model registry
+    # ------------------------------------------------------------------
+    def _load_model_registry(self) -> List[Dict]:
+        registry_path = self.training_dir / "trained_models.json"
+        if not registry_path.exists():
+            raise FileNotFoundError(f"Missing {registry_path}")
+
+        with open(registry_path, "r") as f:
+            registry = json.load(f)
+
+        if not registry:
+            raise ValueError("trained_models.json is empty")
+
+        self.logger.info("Loaded %d trained models", len(registry))
+        return registry
+
+    # ------------------------------------------------------------------
+    # Window generator
+    # ------------------------------------------------------------------
+    def _generate_windows(self, n_samples: int) -> List[Tuple[int, int]]:
+        """
+        Generate walk-forward windows.
+
+        Uses expanding train window with fixed validation horizon.
+        """
+        window_cfg = self.config["walk_forward"]
+        train_min = window_cfg["min_train_size"]
+        val_size = window_cfg["val_size"]
+        step = window_cfg["step_size"]
+
+        windows = []
+        start = train_min
+
+        while start + val_size <= n_samples:
+            windows.append((start, start + val_size))
+            start += step
+
+        if not windows:
+            raise ValueError("No walk-forward windows generated")
+
+        self.logger.info("Generated %d walk-forward windows", len(windows))
+        return windows
+
+    # ------------------------------------------------------------------
+    # Core execution
+    # ------------------------------------------------------------------
+    def run(self) -> None:
+        self.logger.info("[G] Starting Walk-Forward Validation | run_id=%s", self.run_id)
+
+        X, y = self._load_dataset()
+        model_registry = self._load_model_registry()
+        windows = self._generate_windows(len(y))
+
+        metrics_path = self.output_dir / "per_model_window_metrics.jsonl"
+        stability_path = self.output_dir / "stability_scores.parquet"
+        eligible_path = self.output_dir / "eligible_models.json"
+
+        all_metrics: List[Dict] = []
+
+        # --------------------------------------------------------------
+        # Walk-forward evaluation
+        # --------------------------------------------------------------
+        for model_meta in model_registry:
+            name = model_meta["name"]
+            module = model_meta["module"]
+            class_name = model_meta["class"]
+            artifact_path = Path(model_meta["artifact_path"])
+
+            self.logger.info("[G] Evaluating model: %s", name)
+
+            module_obj = __import__(module, fromlist=[class_name])
+            model_cls = getattr(module_obj, class_name)
+            model = model_cls() 
+            model.load_model(artifact_path)
+
+            for train_end, val_end in windows:
+                X_val = X[train_end:val_end]
+                y_val = y[train_end:val_end]
+
+                y_pred = model.predict(X_val)
+
+                # --- Shape normalization  ---
+                if y_pred.ndim == 2 and y_pred.shape[1] == 1:
+                    y_pred = y_pred.ravel()
+
+                if y_pred.ndim != 1:
+                    raise ValueError(
+                        f"Invalid prediction shape from model {name}: {y_pred.shape}"
+                    )
+
+                metrics = compute_metrics(y_val, y_pred)
+                metrics_record = {
+                    "model": name,
+                    "window_start": int(train_end),
+                    "window_end": int(val_end),
+                    **metrics,
+                }
+                all_metrics.append(metrics_record)
+
+        # --------------------------------------------------------------
+        # Persist window metrics
+        # --------------------------------------------------------------
+        if not all_metrics:
+            raise RuntimeError("No walk-forward metrics computed")
+
+        pd.DataFrame(all_metrics).to_json(
+            metrics_path, orient="records", lines=True
         )
+        self.logger.info("[WFV] Saved window metrics to %s", metrics_path)
 
-    monitor.log_stage_end("log_results_summary", {"status": "success"})
+        # --------------------------------------------------------------
+        # Stability aggregation
+        # --------------------------------------------------------------
+        df = pd.DataFrame(all_metrics)
 
-    monitor.log_stage_end(
-        "run_walk_forward_validation",
-        {"status": "completed"},
-    )
+        grouped = df.groupby("model")
 
-    return results
+        agg_dict = {
+            "mean_rmse": ("rmse", "mean"),
+            "std_rmse": ("rmse", "std"),
+        }
+
+        if "mae" in df.columns:
+            agg_dict["mean_mae"] = ("mae", "mean")
+
+        if "r2" in df.columns:
+            agg_dict["mean_r2"] = ("r2", "mean")
+
+        agg = grouped.agg(**agg_dict).reset_index()
+
+        agg["stability_score"] = 1.0 / (1.0 + agg["std_rmse"])
+
+        agg.to_parquet(stability_path)
+        self.logger.info("[WFV] Saved stability scores to %s", stability_path)
+
+        # --------------------------------------------------------------
+        # Eligibility filtering
+        # --------------------------------------------------------------
+        cfg = self.config["walk_forward"]
+        rmse_thresh = cfg["max_mean_rmse"]
+        stability_thresh = cfg["min_stability_score"]
+
+        eligible = agg[
+            (agg["mean_rmse"] <= rmse_thresh)
+            & (agg["stability_score"] >= stability_thresh)
+        ]
+
+        if eligible.empty:
+            self.logger.error(
+                "[G] No eligible models. Summary:\n%s",
+                agg.sort_values("mean_rmse")
+            )
+            raise RuntimeError("No eligible models after walk-forward validation")
+
+        eligible_models = {
+            "eligible_models": eligible[
+                ["model", "mean_rmse", "stability_score"]
+            ].to_dict(orient="records")
+        }
+
+        with open(eligible_path, "w") as f:
+            json.dump(eligible_models, f, indent=2)
+
+        self.logger.info("[WFV] Saved eligible models are %s", eligible_models)
+        self.logger.info("[G] Walk-Forward Pipeline completed successfully")

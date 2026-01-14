@@ -1,8 +1,6 @@
 from __future__ import annotations
-import sys
 import argparse
-from pathlib import Path
-from src.pipeline.G_wfv_pipeline import WalkForwardValidationPipeline
+from src.pipeline.H_ensemble_pipeline import EnsemblePipeline
 
 
 def parse_args() -> argparse.Namespace:
@@ -10,7 +8,7 @@ def parse_args() -> argparse.Namespace:
     Parse CLI arguments.
     """
     parser = argparse.ArgumentParser(
-        description="Run Pipeline G — Walk-Forward Validation"
+        description="Run Pipeline H — Global Ensemble"
     )
 
     parser.add_argument(
@@ -28,19 +26,11 @@ def main() -> None:
     """
     args = parse_args()
 
-    config_path = "src/dag/runners/G_wfv_config.yaml"
-    if not Path(config_path).exists():
-        raise FileNotFoundError(f"Config file not found: {config_path}")
-        
-
-    pipeline = WalkForwardValidationPipeline(
+    pipeline = EnsemblePipeline(
         run_id=args.run_id,
-        config_path=str(config_path),
     )
 
     pipeline.run()
-
-    
 
 
 if __name__ == "__main__":

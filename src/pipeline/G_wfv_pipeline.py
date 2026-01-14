@@ -128,7 +128,7 @@ class WalkForwardValidationPipeline:
         windows = self._generate_windows(len(y))
 
         metrics_path = self.output_dir / "per_model_window_metrics.jsonl"
-        stability_path = self.output_dir / "stability_scores.parquet"
+        stability_path = self.output_dir / "stability_scores.json"
         eligible_path = self.output_dir / "eligible_models.json"
 
         all_metrics: List[Dict] = []
@@ -206,7 +206,9 @@ class WalkForwardValidationPipeline:
 
         agg["stability_score"] = 1.0 / (1.0 + agg["std_rmse"])
 
-        agg.to_parquet(stability_path)
+        with open(stability_path, "w") as f:
+            json.dump(agg.to_dict(orient="records"), f, indent=2)
+
         self.logger.info("[WFV] Saved stability scores to %s", stability_path)
 
         # --------------------------------------------------------------

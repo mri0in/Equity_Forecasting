@@ -111,32 +111,33 @@ class EnsemblePipeline:
     # Load walk-forward summary (for stability scores)
     # ------------------------------------------------------------------
     def _load_stability_scores(self) -> Dict[str, float]:
-        summary_path = self.wfv_dir / "walk_forward_summary.json"
+        stability_path = self.wfv_dir / "stability_scores.json"
 
-        if not summary_path.exists():
+        if not stability_path.exists():
             raise FileNotFoundError(
-                f"walk_forward_summary.json not found at {summary_path}"
+                f"stability_scores.json not found at {stability_path}"
             )
 
-        with open(summary_path, "r") as f:
-            summary = json.load(f)
+        with open(stability_path, "r") as f:
+            stability_data = json.load(f)
 
+        # Extract list from JSON structure (handle both list and dict with list inside)
+        data_list = stability_data if isinstance(stability_data, list) else stability_data.get("stability_scores", [])
+        
         scores = {
-            row["model"]: row["stability_score"]
-            for row in summary["models"]
+            item.get("model"): item.get("stability_score")
+            for item in data_list
         }
-
         return scores
 
     # ------------------------------------------------------------------
     # Load model predictions
     # ------------------------------------------------------------------
-    def _load_predictions(
-        self, model_names: List[str]
-    ) -> Dict[str, np.ndarray]:
+    def _load_predictions( self, model_names: List[str] ) -> Dict[str, np.ndarray]:
         preds: Dict[str, np.ndarray] = {}
 
-        for model in model_names:
+        for _model in model_names:
+            model = _model.get("model", [])
             pred_path = self.predictions_dir / f"{model}_preds.npy"
             if not pred_path.exists():
                 raise FileNotFoundError(
@@ -178,13 +179,15 @@ class EnsemblePipeline:
         # Compute ensemble weights (stability-weighted)
         # ------------------------------------------------------------------
         raw_weights = {}
-        for model in eligible_models:
-            score = stability_scores.get(model)
+        for m in eligible_models:
+            model_name = m.get("model") if isinstance(m, dict) else m
+            if not model_name:
+                raise RuntimeError(f"Invalid model entry in eligible_models: {m}")
+            
+            score = stability_scores.get(model_name)
             if score is None:
-                raise KeyError(
-                    f"Missing stability score for model '{model}'"
-                )
-            raw_weights[model] = score
+                raise KeyError(f"Missing stability score for model '{model_name}'")
+            raw_weights[model_name] = score
 
         weight_sum = sum(raw_weights.values())
         if weight_sum <= 0:

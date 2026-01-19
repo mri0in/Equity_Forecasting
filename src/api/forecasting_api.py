@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 
 from src.adapter.adapter import run_adapter_forecast
+from src.dashboard.history_manager import EquityHistory
 from src.monitoring.monitor import TrainingMonitor
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,9 @@ def _simulated_forecast(equity: str, horizon: int) -> Dict[str, Any]:
         },
     }
 
+def _load_Equity_Features(equity: str) -> pd.DataFrame:
+    return EquityHistory().get_equity_data(equity)
+
 
 # ---------------------------------------------------------------------
 # PUBLIC API (USED BY DASHBOARD)
@@ -94,7 +98,7 @@ def get_forecast_for_equity(
         # These are injected here without pipeline execution.
         # ------------------------------------------------------------------
 
-        equity_features = pd.DataFrame()      # placeholder / cache hook
+        equity_features = _load_Equity_Features(equity)      # placeholder / cache hook
         sentiment_snapshot: Dict[str, Any] = {}
         global_signal = np.array([])
 

@@ -3,15 +3,21 @@
 import json
 from pathlib import Path
 from typing import List
+import pandas as pd
+import yfinance as yf
+from datetime import datetime, timedelta
 
 class EquityHistory:
-    def __init__(self, filepath: str = "datalake/data/raw/equity_history.json"):
+    def __init__(self, filepath: str = "datalake/data/raw"):
         """
         Initialize the equity history manager.
         Loads existing history from JSON file if it exists.
         """
+        
         self.filepath = Path(filepath)
         self.history: List[str] = []
+        self.pd = pd
+        self.yf = yf
 
         if self.filepath.exists():
             try:
@@ -22,26 +28,24 @@ class EquityHistory:
             except Exception as e:
                 print(f"Warning: Could not load history file. {e}")
 
-    def _save_history(self):
-        """Save the current history to JSON file."""
-        try:
-            with open(self.filepath, "w") as f:
-                json.dump(self.history, f)
-        except Exception as e:
-            print(f"Warning: Could not save history file. {e}")
-
-    def get_history(self) -> List[str]:
-        """Return the list of historical equities."""
-        return self.history
-
-    def add_equity(self, equity: str) -> None:
-        """Add a new equity to history if not already present."""
+    def get_equity_data(self, equity: str) -> pd.DataFrame:
+        """Fetch or retrieve equity data as a dataframe."""
         equity = equity.upper().strip()
-        if equity and equity not in self.history:
-            self.history.append(equity)
-            self._save_history()
+        csv_file = self.filepath / f"{equity}.csv"
+        
+        # Check if file exists and is fresh (less than 1 day old)
+        if csv_file.exists():
+            file_age = datetime.now() - datetime.fromtimestamp(csv_file.stat().st_mtime)
+            if file_age < timedelta(days=1):
+                return self.pd.read_csv(csv_file)
+        
+        # Download fresh data from yfinance
+        try:
+            df = self.yf.download(equity, period="1y", progress=False, timeout=120)
+            df.to_csv(csv_file)
+            return df
+        except Exception as e:
+            print(f"Error downloading {equity}: {e}")
+            return csv_file
 
-    def clear_history(self) -> None:
-        """Clear the equity history both in memory and file."""
-        with open(self.filepath, "w") as f:
-            json.dump([], f, indent=4)
+  

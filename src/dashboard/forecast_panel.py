@@ -23,9 +23,10 @@ class ForecastPanel:
     Displays historical prices and forecast for a selected equity.
     """
 
-    def __init__(self, equity: str, horizon: int = 7):
+    def __init__(self, equity: str, horizon: int = 7, sentiment: float = 0.0):
         self.equity: str = equity.upper()
         self.horizon: int = horizon
+        self.sentiment: float = sentiment
         self.dates: Optional[pd.DatetimeIndex] = None
         self.hist_prices: Optional[np.ndarray] = None
         self.forecast_prices: List[float] = []
@@ -49,7 +50,7 @@ class ForecastPanel:
         Fetch real forecast using internal API function.
         """
         try:
-            result = get_forecast_for_equity(self.equity, self.horizon)
+            result = get_forecast_for_equity(self.equity, self.horizon, self.sentiment)
             
             self.dates = pd.to_datetime(result.get("dates"))
             self.hist_prices = np.array(result.get("hist_prices", []))

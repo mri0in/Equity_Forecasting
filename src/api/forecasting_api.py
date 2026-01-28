@@ -75,6 +75,7 @@ def _load_Equity_Features(equity: str) -> pd.DataFrame:
 def get_forecast_for_equity(
     equity: str,
     horizon: int,
+    sentiment: float = 0.0,
 ) -> Dict[str, Any]:
     """
     Fetch a plot-ready forecast for a single equity.
@@ -99,7 +100,7 @@ def get_forecast_for_equity(
         # ------------------------------------------------------------------
 
         equity_features = _load_Equity_Features(equity)      # placeholder / cache hook
-        sentiment_snapshot: Dict[str, Any] = {}
+        sentiment_snapshot = {"sentiment_score": sentiment}
         global_signal = np.array([])
 
         adapter_result = run_adapter_forecast(
@@ -110,8 +111,11 @@ def get_forecast_for_equity(
             horizon=horizon,
         )
 
-        hist_prices = adapter_result["hist_prices"]
-        forecast_prices = adapter_result["forecast_prices"]
+        returns = np.array(adapter_result["return_forecast"])
+        hist_prices = equity_features["close"].values
+        last_price = hist_prices[-1]
+
+        forecast_prices = last_price * np.cumprod(1 + returns)
 
         hist_len = len(hist_prices)
         forecast_len = len(forecast_prices)

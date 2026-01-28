@@ -49,8 +49,13 @@ def main():
     # ==========================================================
     # Step 3 - Panels
     # ==========================================================
-    feed_scores = {}
-    overall_sentiment = 0.0
+
+    # --- Sentiment Analysis Panel (always run to get data) ---
+    sentiment_panel = SentimentPanel(current_equity)
+    sim_data_used = sentiment_panel.render_sentiment()
+    feed_scores = sentiment_panel.feed_scores
+    overall_sentiment = sentiment_panel.overall_sentiment
+
     forecast_prices = []
 
     # --- Forecast Panel ---
@@ -60,7 +65,7 @@ def main():
                 "<h4 style='border-bottom:1px solid #ccc; padding-bottom:5px;'>Forecast Panel</h4>",
                 unsafe_allow_html=True,
             )
-            forecast_panel = ForecastPanel(current_equity, forecast_horizon)
+            forecast_panel = ForecastPanel(current_equity, forecast_horizon, overall_sentiment)
             forecast_panel.render_forecast()
             forecast_prices = forecast_panel.get_forecast()
 
@@ -90,10 +95,6 @@ def main():
             unsafe_allow_html=True,
         )
 
-        sentiment_panel = SentimentPanel(current_equity)
-        sim_data_used = sentiment_panel.render_sentiment()
-        feed_scores = sentiment_panel.feed_scores
-        overall_sentiment = sentiment_panel.overall_sentiment
 
         if sim_data_used:
             st.markdown(

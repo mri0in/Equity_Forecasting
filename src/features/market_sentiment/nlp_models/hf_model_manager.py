@@ -19,10 +19,19 @@ import os
 import logging
 from typing import Optional, Dict, Any
 from dotenv import load_dotenv
-from transformers import pipeline, Pipeline, AutoTokenizer, AutoModelForSequenceClassification
+from sklearn.pipeline import Pipeline
 from src.features.market_sentiment.nlp_models.model_registry import ModelRegistry
 
 load_dotenv()  # Load environment variables from .env file
+
+def _load_hf_dependencies():
+    from transformers import (
+        pipeline,
+        Pipeline,
+        AutoTokenizer,
+        AutoModelForSequenceClassification,
+    )
+    return pipeline, Pipeline, AutoTokenizer, AutoModelForSequenceClassification
 
 class HFModelManager:
     """
@@ -46,8 +55,18 @@ class HFModelManager:
         else:
             self._logger.warning("No Hugging Face token found. Public models only.")
 
+        # Load transformers dependencies
+        (
+            self._pipeline,
+            Pipeline,
+            self._AutoTokenizer,
+            self._AutoModelForSequenceClassification,
+        ) = _load_hf_dependencies()
+
         # Cache for loaded pipelines
-        self._pipelines: Dict[str, Pipeline] = {}
+        self._pipelines: Dict[str, selfPipeline] = {}
+
+
 
     def load_pipeline(self, model_name: str) -> Pipeline:
         """

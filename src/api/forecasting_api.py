@@ -14,6 +14,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict, Any
 
+from anyio import Path
 import numpy as np
 import pandas as pd
 
@@ -68,6 +69,19 @@ def _simulated_forecast(equity: str, horizon: int) -> Dict[str, Any]:
 def _load_Equity_Features(equity: str) -> pd.DataFrame:
     return EquityHistory().get_equity_data(equity)
 
+def load_global_signal() -> np.ndarray:
+    path = Path(__file__).resolve().parent / "global_signal" / "global_signal.npy" #temp Hardcoded path
+
+    if not path.exists():
+        raise FileNotFoundError("No active global signal promoted")
+    
+    signal = np.load(path)
+
+    if signal.ndim != 1:
+        raise ValueError("Global signal must be a 1D numpy array")
+
+    return signal
+
 
 # ---------------------------------------------------------------------
 # PUBLIC API (USED BY DASHBOARD)
@@ -101,7 +115,7 @@ def get_forecast_for_equity(
 
         equity_features = _load_Equity_Features(equity)      # placeholder / cache hook
         sentiment_snapshot = {"sentiment_score": sentiment}
-        global_signal = np.array([])
+        global_signal = load_global_signal()               # placeholder / cache hook
 
         adapter_result = run_adapter_forecast(
             active_equity=equity,

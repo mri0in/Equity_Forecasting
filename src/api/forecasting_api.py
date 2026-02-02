@@ -25,7 +25,6 @@ from src.monitoring.monitor import TrainingMonitor
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-monitor = TrainingMonitor()
 
 
 # ---------------------------------------------------------------------
@@ -70,7 +69,9 @@ def _load_Equity_Features(equity: str) -> pd.DataFrame:
     return EquityHistory().get_equity_data(equity)
 
 def load_global_signal() -> np.ndarray:
-    path = Path(__file__).resolve().parent / "global_signal" / "global_signal.npy" #temp Hardcoded path
+    
+    base_dir = Path(__file__).parent
+    path = base_dir / "global_signal" / "global_signal.npy"
 
     if not path.exists():
         raise FileNotFoundError("No active global signal promoted")
@@ -100,10 +101,6 @@ def get_forecast_for_equity(
     equity = equity.upper().strip()
     logger.info("[API] Forecast request: equity=%s horizon=%s", equity, horizon)
 
-    monitor.log_stage_start(
-        "Forecast API",
-        {"equity": equity, "horizon": horizon},
-    )
 
     try:
         # ------------------------------------------------------------------
@@ -160,21 +157,12 @@ def get_forecast_for_equity(
             },
         }
 
-        monitor.log_stage_end(
-            "Forecast API",
-            {"status": "adapter_success"},
-        )
 
         return result
 
     except Exception as exc:
         logger.exception(
             "[API] Adapter failed for %s, using simulation fallback", equity
-        )
-
-        monitor.log_stage_end(
-            "Forecast API",
-            {"status": "simulation_fallback", "error": str(exc)},
         )
 
         return _simulated_forecast(equity, horizon)

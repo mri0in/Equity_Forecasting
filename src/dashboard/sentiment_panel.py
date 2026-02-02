@@ -26,7 +26,7 @@ class SentimentPanel:
     """
 
     def __init__(self, equity: str):
-        self.equity = equity.upper()
+        self.equity = equity.upper() if equity else None
         self.feeds = ["News", "Press", "Social", "Web"]
         self.feed_scores: Dict[str, float] = {}
         self.overall_sentiment: float = 0.0

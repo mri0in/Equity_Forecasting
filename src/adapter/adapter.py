@@ -48,7 +48,7 @@ def _validate_inputs(
     if equity_features.empty:
         raise ValueError("equity_features must not be empty")
 
-    if not isinstance(global_signal, np.ndarray):
+    #if not isinstance(global_signal, np.ndarray):
         raise TypeError("global_signal must be numpy array")
 
     if horizon <= 0:

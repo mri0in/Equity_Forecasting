@@ -19,14 +19,29 @@ class EquityHistory:
         self.pd = pd
         self.yf = yf
 
-        if self.filepath.exists():
+        if not self.filepath.exists():
+            print(f"Warning: History path does not exist: {self.filepath}")
+
+        elif self.filepath.is_dir():
+            print(f"Warning: Expected history file but got directory: {self.filepath}")
+
+        else:
             try:
-                with open(self.filepath, "r") as f:
+                with self.filepath.open("r", encoding="utf-8") as f:
                     data = json.load(f)
-                    if isinstance(data, list):
-                        self.history = [str(e).upper() for e in data]
+
+                if isinstance(data, list):
+                    self.history = [str(e).upper() for e in data]
+                else:
+                    print(
+                        f"Warning: History file content invalid (expected list): {self.filepath}"
+                    )
+
+            except json.JSONDecodeError as e:
+                print(f"Warning: Invalid JSON in history file {self.filepath}: {e}")
+
             except Exception as e:
-                print(f"Warning: Could not load history file. {e}")
+                print(f"Warning: Could not load history file {self.filepath}: {e}")
 
     def get_equity_data(self, equity: str) -> pd.DataFrame:
         """Fetch or retrieve equity data as a dataframe."""

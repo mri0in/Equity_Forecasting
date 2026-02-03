@@ -14,7 +14,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict, Any
 
-from anyio import Path
+from pathlib import Path
 import numpy as np
 import pandas as pd
 
@@ -66,7 +66,9 @@ def _simulated_forecast(equity: str, horizon: int) -> Dict[str, Any]:
     }
 
 def _load_Equity_Features(equity: str) -> pd.DataFrame:
-    return EquityHistory().get_equity_data(equity)
+    EquityHistory_Manager = EquityHistory()
+    df = EquityHistory_Manager.get_equity_data(equity)
+    return df
 
 def load_global_signal() -> np.ndarray:
     
@@ -74,6 +76,7 @@ def load_global_signal() -> np.ndarray:
     path = base_dir / "global_signal" / "global_signal.npy"
 
     if not path.exists():
+        print("Global signal file not found at:", path)
         raise FileNotFoundError("No active global signal promoted")
     
     signal = np.load(path)

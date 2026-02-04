@@ -70,8 +70,22 @@ def main() -> None:
                 sentiment=None,  # Explicit: sentiment is optional
             )
 
-            forecast_panel.render_forecast()
+            forecast_simulated = forecast_panel.render_forecast()
             forecast_prices = forecast_panel.get_forecast()
+            if forecast_simulated:
+                    st.markdown(
+                        "<small>⚠️ Forecast based on simulated data.</small>",
+                        unsafe_allow_html=True,
+                    )
+                    logger.warning("Forecast shown using simulated data.")
+            else:
+                st.markdown(
+                    "<small>✅ Live market forecast.</small>",
+                    unsafe_allow_html=True,
+                )
+
+
+
 
     # Spacer
     st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)

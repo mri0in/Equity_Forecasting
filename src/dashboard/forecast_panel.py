@@ -45,10 +45,11 @@ class ForecastPanel:
 
         logger.info(f"Simulated forecast for {self.equity}, horizon {self.horizon}")
 
-    def fetch_real_forecast(self) -> None:
+    def fetch_real_forecast(self) -> bool:
         """
         Fetch real forecast using internal API function.
         """
+        flag = False
         try:
             result = get_forecast_for_equity(self.equity, self.horizon, self.sentiment)
             
@@ -56,10 +57,13 @@ class ForecastPanel:
             self.hist_prices = np.array(result.get("hist_prices", []))
             self.forecast_prices = list(result.get("forecast_prices", []))
             logger.info(f"Real forecast fetched for {self.equity}, horizon {self.horizon}")
+            flag = True
         except Exception as e:
             logger.error(f"Failed to fetch real forecast for {self.equity}: {e}")
             # fallback to simulation
             self.simulate_forecast()
+            flag = False
+        return flag
 
     def render_chart(self) -> None:
         """
@@ -100,21 +104,50 @@ class ForecastPanel:
 
         st.plotly_chart(fig, use_container_width=True)
 
-    def render_forecast(self, use_simulation: bool = False) -> None:
+    def render_forecast(self, use_simulation: bool = False) -> bool:
         """
-        Main method to render forecast panel.
-        If use_simulation=True, fallback/demo mode is used.
+        Render the forecast panel.
+
+        Args:
+            use_simulation (bool): Force simulated forecast.
+
+        Returns:
+            bool: True if simulated data was used, False if live forecast was used.
         """
         if not self.equity:
             st.warning("No equity selected for forecast panel.")
-            return
+            return True  # nothing rendered → treat as simulated
 
+        # --------------------------------------------------
+        # Forced simulation path
+        # --------------------------------------------------
         if use_simulation:
+            logger.info("ForecastPanel: Forced simulation mode.")
             self.simulate_forecast()
-        else:
-            self.fetch_real_forecast()
+            self.render_chart()
+            return True
 
+        # --------------------------------------------------
+        # Attempt live forecast
+        # --------------------------------------------------
+        try:
+            live_ok = self.fetch_real_forecast()
+        except Exception:
+            logger.exception("Live forecast failed, falling back to simulation.")
+            live_ok = False
+
+        # --------------------------------------------------
+        # Fallback if live failed
+        # --------------------------------------------------
+        if not live_ok:
+            logger.warning("ForecastPanel: Using simulated forecast fallback.")
+            self.simulate_forecast()
+            self.render_chart()
+            return True
+
+        logger.info("ForecastPanel: Live forecast rendered.")
         self.render_chart()
+        return False
 
     def get_forecast(self) -> List[float]:
         """

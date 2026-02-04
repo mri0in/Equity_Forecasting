@@ -97,6 +97,11 @@ class AdapterModel:
         Produce horizon-length RETURN forecast.
         """
 
+        numeric_features = equity_features.select_dtypes(include="number")
+
+        if numeric_features.empty:
+            raise ValueError("No numeric equity features available for forecasting")
+
         equity_signal = equity_features.mean(axis=1).iloc[-1]
         global_signal_value = float(np.mean(global_signal[-5:]))
 

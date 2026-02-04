@@ -72,7 +72,7 @@ def _load_Equity_Features(equity: str) -> pd.DataFrame:
 
 def load_global_signal() -> np.ndarray:
     
-    base_dir = Path(__file__).parent
+    base_dir = Path(__file__).resolve().parent.parent
     path = base_dir / "global_signal" / "global_signal.npy"
 
     if not path.exists():
@@ -126,7 +126,7 @@ def get_forecast_for_equity(
         )
 
         returns = np.array(adapter_result["return_forecast"])
-        hist_prices = equity_features["close"].values
+        hist_prices = equity_features["Close"].values
         last_price = hist_prices[-1]
 
         forecast_prices = last_price * np.cumprod(1 + returns)

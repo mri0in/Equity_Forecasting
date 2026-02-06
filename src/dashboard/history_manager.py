@@ -38,7 +38,7 @@ class EquityHistory:
 
         Rules:
         - CSV name must be {EQUITY}.csv
-        - Cache is valid for 24 hours
+        - Cache is valid if it already contains the latest available market data
         - Always returns a DataFrame or raises
         """
         if not equity or not isinstance(equity, str):
@@ -50,17 +50,53 @@ class EquityHistory:
         logger.info("Fetching equity history for %s", equity)
 
         # ---------------------------
-        # Load from cache if fresh
+        # Use cache if it already has the latest data
         # ---------------------------
         if csv_path.exists():
             if not csv_path.is_file():
                 raise ValueError(f"Expected CSV file but got directory: {csv_path}")
 
-            file_age = datetime.now() - datetime.fromtimestamp(csv_path.stat().st_mtime)
-            if file_age < timedelta(days=1):
-                logger.info("Using cached equity data for %s", equity)
-                df = pd.read_csv(csv_path)
-                return self._validate_dataframe(df, equity)
+            try:
+                # Simple read: just load the CSV with Date as index
+                local_df = pd.read_csv(csv_path, index_col='Date', parse_dates=True)
+            except Exception as e:
+                logger.warning("Failed to read local CSV %s: %s", csv_path, e)
+                local_df = None
+
+            if local_df is not None and not local_df.empty:
+                # determine local last date
+                try:
+                    if hasattr(local_df.index, "max"):
+                        local_last = pd.to_datetime(local_df.index.max())
+                        local_last_date = local_last.date()
+                    elif "Date" in local_df.columns:
+                        local_last_date = pd.to_datetime(local_df["Date"]).max().date()
+                    else:
+                        local_last_date = None
+                except Exception:
+                    local_last_date = None
+
+                # try to get the latest available date from Yahoo (1-day query)
+                online_last_date = None
+                try:
+                    recent = yf.download(
+                        equity,
+                        period="1d",
+                        progress=False,
+                        auto_adjust=True,
+                        threads=False,
+                    )
+                    if not recent.empty:
+                        online_last_date = pd.to_datetime(recent.index.max()).date()
+                except Exception:
+                    logger.debug("Failed to fetch 1-day data to validate cache for %s", equity)
+
+                # If we couldn't determine online date, prefer local cache
+                if local_last_date is not None and (online_last_date is None or local_last_date >= online_last_date):
+                    logger.info("Using cached equity data for %s (last local date: %s, online last date: %s)", equity, local_last_date, online_last_date)
+                    return self._validate_dataframe(local_df, equity)
+
+                logger.info("Local cache is stale or missing latest date for %s (local: %s, online: %s)", equity, local_last_date, online_last_date)
 
         # ---------------------------
         # Download fresh data
@@ -82,10 +118,31 @@ class EquityHistory:
         if df.empty:
             raise ValueError(f"No data returned from Yahoo Finance for {equity}")
 
+        # Normalize columns: flatten MultiIndex if present, keep only OHLCV columns
+        if isinstance(df.columns, pd.MultiIndex):
+            # If MultiIndex, flatten to single level (use first level)
+            df.columns = df.columns.get_level_values(0)
+        
+        # Standardize column names to lowercase
+        df.columns = df.columns.str.lower()
+        
+        # Keep only OHLCV columns (some may be "adj close" instead of "close")
+        ohlcv_cols = ['open', 'high', 'low', 'close', 'volume']
+        adj_cols = ['open', 'high', 'low', 'adj close', 'volume']
+        
+        # Use whichever set matches the available columns
+        available = df.columns.tolist()
+        keep_cols = [c for c in ohlcv_cols if c in available]
+        if not keep_cols:
+            keep_cols = [c for c in adj_cols if c in available]
+        
+        if keep_cols:
+            df = df[keep_cols]
+        
         # Persist
         try:
             self.raw_data_dir.mkdir(parents=True, exist_ok=True)
-            df.to_csv(csv_path)
+            df.to_csv(csv_path, index_label='Date')
         except Exception as e:
             logger.warning("Failed to write equity CSV: %s (%s)", csv_path, e)
 

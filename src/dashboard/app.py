@@ -68,6 +68,8 @@ def main() -> None:
                 equity=current_equity,
                 horizon=forecast_horizon,
                 sentiment=None,  # Explicit: sentiment is optional
+                sentiment_simulated=sentiment_simulated,
+                overall_sentiment=overall_sentiment or 0.0,
             )
 
             forecast_simulated = forecast_panel.render_forecast()

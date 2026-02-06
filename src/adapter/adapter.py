@@ -95,6 +95,9 @@ class AdapterModel:
     ) -> np.ndarray:
         """
         Produce horizon-length RETURN forecast.
+        
+        When sentiment is unavailable (score == 0.0), dynamically redistribute 
+        the sentiment weight to equity and global signals proportionally.
         """
 
         numeric_features = equity_features.select_dtypes(include="number")
@@ -105,12 +108,33 @@ class AdapterModel:
         equity_signal = equity_features.mean(axis=1).iloc[-1]
         global_signal_value = float(np.mean(global_signal[-5:]))
 
-        blended_return = (
-            self.equity_weight * equity_signal
-            + self.global_weight * global_signal_value
-            + self.sentiment_weight * sentiment_score
-        )
+        # Log signal inputs for debugging
+        logger.info(f"[ADAPTER] Signals - equity: {equity_signal:.6f}, global: {global_signal_value:.6f}, sentiment: {sentiment_score:.6f}")
 
+        # Dynamic reweighting when sentiment is unavailable
+        if sentiment_score == 0.0:
+            # Redistribute sentiment weight proportionally to equity and global
+            total_available_weight = self.equity_weight + self.global_weight
+            adjusted_equity_w = self.equity_weight / total_available_weight
+            adjusted_global_w = self.global_weight / total_available_weight
+            
+            logger.info(f"[ADAPTER] Using reweighted signals (no sentiment): equity_w={adjusted_equity_w:.3f}, global_w={adjusted_global_w:.3f}")
+            
+            blended_return = (
+                adjusted_equity_w * equity_signal
+                + adjusted_global_w * global_signal_value
+            )
+        else:
+            # Use original weighted blend when sentiment is available
+            logger.info(f"[ADAPTER] Using full weighted blend: equity_w={self.equity_weight:.3f}, global_w={self.global_weight:.3f}, sentiment_w={self.sentiment_weight:.3f}")
+            
+            blended_return = (
+                self.equity_weight * equity_signal
+                + self.global_weight * global_signal_value
+                + self.sentiment_weight * sentiment_score
+            )
+
+        logger.info(f"[ADAPTER] Blended return before broadcast: {blended_return:.6f}")
         return np.full(horizon, blended_return)
 
 

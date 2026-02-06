@@ -94,15 +94,28 @@ def get_forecast_for_equity(
     equity: str,
     horizon: int,
     sentiment: float = 0.0,
+    sentiment_simulated: bool = False,
+    overall_sentiment: float = 0.0,
 ) -> Dict[str, Any]:
     """
     Fetch a plot-ready forecast for a single equity.
 
     This function is called by the dashboard ForecastPanel.
+    
+    Args:
+        equity: Ticker symbol
+        horizon: Forecast horizon in days
+        sentiment: Sentiment score (used if sentiment_simulated is False)
+        sentiment_simulated: Whether sentiment data is simulated
+        overall_sentiment: Real overall sentiment score (used if not simulated)
     """
 
     equity = equity.upper().strip()
     logger.info("[API] Forecast request: equity=%s horizon=%s", equity, horizon)
+
+    if not sentiment_simulated:
+        logger.info("[API] Using real sentiment score: %s", overall_sentiment)
+        sentiment = overall_sentiment
 
 
     try:
@@ -113,9 +126,9 @@ def get_forecast_for_equity(
         # These are injected here without pipeline execution.
         # ------------------------------------------------------------------
 
-        equity_features = _load_Equity_Features(equity)      # placeholder / cache hook
+        equity_features = _load_Equity_Features(equity)      
         sentiment_snapshot = {"sentiment_score": sentiment}
-        global_signal = load_global_signal()               # placeholder / cache hook
+        global_signal = load_global_signal()                
 
         adapter_result = run_adapter_forecast(
             active_equity=equity,
@@ -126,10 +139,22 @@ def get_forecast_for_equity(
         )
 
         returns = np.array(adapter_result["return_forecast"])
-        hist_prices = equity_features["Close"].values
+        
+        # Log raw returns to understand scale
+        logger.info(f"[API] Raw adapter returns: min={returns.min():.6f}, max={returns.max():.6f}, mean={returns.mean():.6f}")
+        
+        # Normalize returns to realistic percentage range (-5% to +5%)
+        # Use sigmoid-like scaling to keep returns bounded
+        returns_normalized = np.tanh(returns / 100) * 0.05  # Scales to ±5%
+        
+        logger.info(f"[API] Normalized returns: min={returns_normalized.min():.6f}, max={returns_normalized.max():.6f}, mean={returns_normalized.mean():.6f}")
+        
+        hist_prices = equity_features["close"].values
         last_price = hist_prices[-1]
 
-        forecast_prices = last_price * np.cumprod(1 + returns)
+        forecast_prices = last_price * np.cumprod(1 + returns_normalized)
+        
+        logger.info(f"[API] Forecast prices: min={forecast_prices.min():.2f}, max={forecast_prices.max():.2f}, last={forecast_prices[-1]:.2f}")
 
         hist_len = len(hist_prices)
         forecast_len = len(forecast_prices)

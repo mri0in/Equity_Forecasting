@@ -142,9 +142,9 @@ class CacheManager:
                 return self._memory_cache[key]
 
         path = self._resolve_path(module, key)
-        if path.exists():
+        if path.exists():   
             obj = joblib.load(path)
-            self.save(module, key, obj)  # refresh memory
+            self.save(key, obj, module)  # refresh memory
             logger.info(f"Cache hit (disk): {module}:{key}")
             return obj
 

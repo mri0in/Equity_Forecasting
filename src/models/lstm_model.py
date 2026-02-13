@@ -98,6 +98,105 @@ class LSTMModel(BaseModel):
         """
         Train the LSTM model.
         """
+        
+        # =====================================================================
+        # Input Validation
+        # =====================================================================
+        
+        # Validate training data exists and has correct shapes
+        if X_train is None or X_train.size == 0:
+            raise ValueError("X_train cannot be None or empty")
+        if y_train is None or y_train.size == 0:
+            raise ValueError("y_train cannot be None or empty")
+        
+        if X_train.shape[0] != y_train.shape[0]:
+            raise ValueError(
+                f"X_train and y_train must have same first dimension: "
+                f"{X_train.shape[0]} vs {y_train.shape[0]}"
+            )
+        
+        # Check for NaN values in training data
+        if np.isnan(X_train).any():
+            nan_count = np.isnan(X_train).sum()
+            self.logger.warning(
+                f"Found {nan_count} NaN values in X_train. Removing rows with NaN..."
+            )
+            valid_mask = ~np.isnan(X_train).any(axis=tuple(range(1, X_train.ndim)))
+            X_train = X_train[valid_mask]
+            y_train = y_train[valid_mask]
+            
+            if X_train.size == 0:
+                raise ValueError("No valid training data after removing NaN values")
+        
+        if np.isnan(y_train).any():
+            nan_count = np.isnan(y_train).sum()
+            self.logger.warning(f"Found {nan_count} NaN values in y_train. Removing...")
+            valid_mask = ~np.isnan(y_train)
+            X_train = X_train[valid_mask]
+            y_train = y_train[valid_mask]
+            
+            if y_train.size == 0:
+                raise ValueError("No valid training targets after removing NaN values")
+        
+        # Check for infinite values
+        if np.isinf(X_train).any():
+            inf_count = np.isinf(X_train).sum()
+            self.logger.warning(f"Found {inf_count} infinite values in X_train. Replacing with NaN...")
+            X_train = np.where(np.isinf(X_train), np.nan, X_train)
+        
+        if np.isinf(y_train).any():
+            inf_count = np.isinf(y_train).sum()
+            self.logger.warning(f"Found {inf_count} infinite values in y_train. Replacing with NaN...")
+            y_train = np.where(np.isinf(y_train), np.nan, y_train)
+        
+        # Validate batch size
+        if self.batch_size <= 0:
+            raise ValueError(f"batch_size must be positive, got {self.batch_size}")
+        
+        if self.batch_size > X_train.shape[0]:
+            self.logger.warning(
+                f"batch_size ({self.batch_size}) exceeds training data size ({X_train.shape[0]}). "
+                f"Reducing to {X_train.shape[0]}"
+            )
+            self.batch_size = X_train.shape[0]
+        
+        # Validate validation data if provided
+        if X_val is not None and y_val is not None:
+            if X_val.shape[0] != y_val.shape[0]:
+                raise ValueError(
+                    f"X_val and y_val must have same first dimension: "
+                    f"{X_val.shape[0]} vs {y_val.shape[0]}"
+                )
+            
+            if X_val.shape[0] < 1:
+                raise ValueError("Validation set must have at least 1 sample")
+            
+            # Validate validation set size isn't too small
+            val_size_ratio = X_val.shape[0] / (X_train.shape[0] + X_val.shape[0])
+            if val_size_ratio < 0.05:
+                self.logger.warning(
+                    f"Validation set ratio is very small ({val_size_ratio:.2%}). "
+                    f"Consider using more validation data for reliable evaluation."
+                )
+            
+            # Check for NaN in validation data
+            if np.isnan(X_val).any() or np.isnan(y_val).any():
+                self.logger.warning("Validation data contains NaN values. Filtering...")
+                valid_mask = ~(np.isnan(X_val).any(axis=tuple(range(1, X_val.ndim))) | np.isnan(y_val))
+                X_val = X_val[valid_mask]
+                y_val = y_val[valid_mask]
+                
+                if X_val.size == 0:
+                    self.logger.warning("All validation data was invalid. Disabling validation.")
+                    X_val = None
+                    y_val = None
+            
+            # Check for infinite values in validation data
+            if X_val is not None:
+                if np.isinf(X_val).any():
+                    X_val = np.where(np.isinf(X_val), np.nan, X_val)
+                if np.isinf(y_val).any():
+                    y_val = np.where(np.isinf(y_val), np.nan, y_val)
 
         train_dataset = TensorDataset( 
             torch.from_numpy(X_train).float(), 

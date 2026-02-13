@@ -7,11 +7,15 @@ from streamlit.delta_generator import DeltaGenerator
 from src.dashboard.utils import get_ui_logger
 
 from src.features.market_sentiment.sentiment.sentiment_aggregator import SentimentAggregator
+from src.monitoring.error_logging import (
+    ErrorLogger, ErrorComponent, FallbackReason
+)
 
 # -------------------------------
 # Logging configuration
 # -------------------------------
 logger = get_ui_logger(__name__)
+error_logger = ErrorLogger(component=ErrorComponent.SENTIMENT_PANEL)
 
 # -------------------------------
 # Sentiment Panel Class
@@ -56,12 +60,24 @@ class SentimentPanel:
                 f"Fetched aggregated sentiment for {self.equity}: "
                 f"{self.feed_scores}, overall {self.overall_sentiment}"
             )
-        except SentimentAggregator.AllNonSocialFeedsFailed:
-            logger.warning(f"Using simulated sentiment for {self.equity} (all non-social feeds failed).")
+        except SentimentAggregator.AllNonSocialFeedsFailed as e:
+            # Log explicit fallback with reason
+            error_logger.log_fallback(
+                reason=FallbackReason.EXTERNAL_API_FAILURE,
+                exception=e,
+                context={"equity": self.equity, "feed": "sentiment"},
+                fallback_action="Using simulated sentiment scores",
+            )
             self.simulate_sentiment()
             self.is_sim_data = True
         except Exception as e:
-            logger.error(f"Fetching aggregated sentiment failed for {self.equity}: {e}")
+            # Log error and re-raise (critical path)
+            error_logger.log_error(
+                error_msg="Aggregated sentiment fetch failed",
+                exception=e,
+                context={"equity": self.equity},
+                severity="error"
+            )
             raise
         return is_sim_data
 

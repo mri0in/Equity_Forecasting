@@ -38,6 +38,7 @@ import pandas as pd
 from src.features.technical.build_features import FeatureBuilder
 from src.monitoring.monitor import TrainingMonitor
 from src.utils.logger import get_logger
+from src.validation.validator import DataValidator
 
 
 class FeaturePipeline:
@@ -95,6 +96,9 @@ class FeaturePipeline:
             save_dir=Path(f"datalake/runs/{run_id}/features"),
             artifact_policy="none",
         )
+
+        # Initialize validator for featured data
+        self.validator = DataValidator(stage="featured")
 
         self.logger.info(
             "FeaturePipeline initialized | run_id=%s | target=%s | horizon=%d",
@@ -262,6 +266,25 @@ class FeaturePipeline:
                 
                 # Add equity identifier column after NaN sanitization
                 df_features["equity_id"] = ticker
+                
+                # Validate featured data
+                try:
+                    validation_results = self.validator.validate(df_features)
+                    if validation_results.get("all_valid", False):
+                        self.logger.info("[FEAT] Validation PASSED %s", ticker)
+                    else:
+                        self.logger.warning(
+                            "[FEAT] Validation FAILED for %s: %s",
+                            ticker,
+                            self.validator.get_summary()
+                        )
+                        # Log failures but continue
+                        self.monitor.log_event(f"validation_failed_{ticker}", {
+                            "ticker": ticker,
+                            "failures": list(validation_results.get("checks", {}).keys()),
+                        })
+                except Exception as val_exc:
+                    self.logger.warning("[FEAT] Validation error for %s: %s", ticker, str(val_exc))
 
                 df_features.to_parquet(
                     feature_path,

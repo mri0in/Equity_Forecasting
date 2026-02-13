@@ -1,29 +1,61 @@
-pandas                                      #Data processing
-numpy                                       #Data processing
-matplotlib                                  #Visualization
-scikit-learn                                #ML
-torch                                       #ML Models
-yfinance                                    #Data sources
-pyYAML                                      #Data serialization format(config)
-requests                                    #News parsing/sentiment
-beautifulsoup4                              #News parsing/sentiment
-nltk                                        #News parsing/sentiment
-textblob                                    #News parsing/sentiment
-plotly                                      #Visualization
-streamlit                                   #Dashboard
-fastapi                                     #Dashboard
-uvicorn                                     #Dashboard
-schedule                                    #Alerts/scheduling
-python-dotenv                               #env config
-httpx                                       #Async + Sync requests
-optuna                                      #Hyperparameter optimizer
-lightgbm                                    #Boost prediction performance
-seaborn                                     #Visualization
-feedparser                                  #News parsing
-transformers                                #NLP models
-graphviz                                    #Graph visualization
-ipywidgets                                  #Interactive widgets
-IPython                                     #Jupyter notebook
-streamlit                                   #Dashboard 
-joblib                                      #cach files
+# Core data processing and ML (pinned versions - stable)
+numpy==2.4.2
+pandas==2.2.3
+scikit-learn==1.6.1
+
+# Deep learning
+torch==2.6.0
+pytorch-lightning==2.4.0
+
+# Financial data
+yfinance==0.2.33
+
+# API and web
+fastapi==0.115.12
+uvicorn==0.31.0
+pydantic==2.11.1
+
+# Optimization and modeling
+optuna==4.1.0
+xgboost==2.1.1
+lightgbm==4.1.1
+
+# Data storage
+sqlalchemy==2.0.35
+pyarrow==17.0.0
+
+# Visualization
+matplotlib==3.10.1
+plotly==5.24.1
+seaborn==0.13.2
+graphviz==0.20.3
+
+# NLP and sentiment
+nltk==3.8.1
+textblob==0.17.1
+transformers==4.48.2
+feedparser==6.0.11
+
+# Web scraping
+beautifulsoup4==4.13.4
+requests==2.32.3
+httpx==0.28.1
+
+# Monitoring and logging
+python-json-logger==3.2.1
+
+# Utilities
+python-dotenv==1.0.1
+tqdm==4.67.1
+schedule==1.2.2
+joblib==1.4.2
+pyyaml==6.0.2
+
+# Jupyter and notebooks
+ipython==8.31.0
+jupyter==1.1.1
+ipywidgets==8.1.5
+
+# Dashboard
+streamlit==1.42.1
 

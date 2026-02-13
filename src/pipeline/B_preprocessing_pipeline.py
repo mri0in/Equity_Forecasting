@@ -36,6 +36,7 @@ import json as jsonlib
 
 from src.utils.logger import get_logger
 from src.monitoring.monitor import TrainingMonitor
+from src.validation.validator import DataValidator
 
 
 class PreprocessingPipeline:
@@ -77,6 +78,9 @@ class PreprocessingPipeline:
             save_dir=Path(f"datalake/runs/{run_id}/preprocessing"),
             artifact_policy="none",
         )
+        
+        # Initialize validator for preprocessed data
+        self.validator = DataValidator(stage="preprocessed")
 
         self.logger.info(
             "PreprocessingPipeline initialized | run_id=%s | used_tickers_path=%s",
@@ -212,6 +216,25 @@ class PreprocessingPipeline:
                 df = pd.read_csv(raw_path)
                 df = self._drop_missing(df, ticker)
                 df = self._select_columns(df, ticker)
+                
+                # Validate preprocessed data
+                try:
+                    validation_results = self.validator.validate(df)
+                    if validation_results.get("all_valid", False):
+                        self.logger.info("[PRE] Validation PASSED %s", ticker)
+                    else:
+                        self.logger.warning(
+                            "[PRE] Validation FAILED for %s: %s", 
+                            ticker, 
+                            self.validator.get_summary()
+                        )
+                        # Log failures but continue processing
+                        self.monitor.log_event(f"validation_failed_{ticker}", {
+                            "ticker": ticker,
+                            "failures": list(validation_results.get("checks", {}).keys()),
+                        })
+                except Exception as val_exc:
+                    self.logger.warning("[PRE] Validation error for %s: %s", ticker, str(val_exc))
 
                 out_path = self.clean_root / f"{ticker.replace('.', '_')}.csv"
                 df.to_csv(out_path, index=False)

@@ -27,6 +27,7 @@ import yfinance as yf
 from src.monitoring.monitor import TrainingMonitor
 from src.utils.logger import get_logger
 from src.utils.config import load_config
+from src.validation.validator import DataValidator
 
 logger = get_logger(__name__)
 
@@ -76,6 +77,9 @@ class IngestionPipeline:
 
         Path(self.data_dir).mkdir(parents=True, exist_ok=True)
         self._used_tickers: List[str] = []
+        
+        # Initialize validator for raw stock data
+        self.validator = DataValidator(stage="raw_stock")
 
         logger.info(
             "IngestionPipeline initialized | tickers=%d | retries=%d | max_age_days=%d",
@@ -150,6 +154,21 @@ class IngestionPipeline:
             df = self._fetch_history(ticker)
 
             if df is not None and not df.empty:
+                # Validate raw data before saving
+                try:
+                    validation_results = self.validator.validate(df)
+                    if validation_results.get("all_valid", False):
+                        logger.info("[INGEST] Validation PASSED ticker=%s", ticker)
+                    else:
+                        logger.warning("[INGEST] Validation FAILED for %s: %s", ticker, self.validator.get_summary())
+                        # Log failures but don't block ingestion for now
+                        self.monitor.log_event(f"validation_failed_{ticker}", {
+                            "ticker": ticker,
+                            "failures": list(validation_results.get("checks", {}).keys()),
+                        })
+                except Exception as val_exc:
+                    logger.warning("[INGEST] Validation error for %s: %s", ticker, str(val_exc))
+                
                 df.to_csv(save_path, index=False)
                 logger.info("[INGEST] Saved %s rows=%d path=%s", ticker, len(df), save_path)
                 self._used_tickers.append(ticker)

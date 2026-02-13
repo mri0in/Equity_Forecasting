@@ -21,9 +21,13 @@ import pandas as pd
 from src.adapter.adapter import run_adapter_forecast
 from src.dashboard.history_manager import EquityHistory
 from src.monitoring.monitor import TrainingMonitor
+from src.monitoring.error_logging import (
+    ErrorLogger, ErrorComponent, FallbackReason
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+error_logger = ErrorLogger(component=ErrorComponent.FORECASTING_API)
 
 
 
@@ -188,9 +192,32 @@ def get_forecast_for_equity(
 
         return result
 
-    except Exception as exc:
-        logger.exception(
-            "[API] Adapter failed for %s, using simulation fallback", equity
+    except FileNotFoundError as exc:
+        # Global signal file not found
+        error_logger.log_fallback(
+            reason=FallbackReason.MISSING_DEPENDENCY,
+            exception=exc,
+            context={"equity": equity, "horizon": horizon, "missing": "global_signal"},
+            fallback_action="Using simulated forecast with synthetic data",
         )
+        return _simulated_forecast(equity, horizon)
 
+    except ValueError as exc:
+        # Data validation error
+        error_logger.log_fallback(
+            reason=FallbackReason.CORRUPT_DATA,
+            exception=exc,
+            context={"equity": equity, "horizon": horizon},
+            fallback_action="Using simulated forecast with synthetic data",
+        )
+        return _simulated_forecast(equity, horizon)
+
+    except Exception as exc:
+        # Generic adapter failure
+        error_logger.log_fallback(
+            reason=FallbackReason.ADAPTER_EXCEPTION,
+            exception=exc,
+            context={"equity": equity, "horizon": horizon},
+            fallback_action="Using simulated forecast with synthetic data",
+        )
         return _simulated_forecast(equity, horizon)

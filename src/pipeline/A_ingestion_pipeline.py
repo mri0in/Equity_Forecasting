@@ -21,6 +21,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
+from uuid import uuid4
 
 import yfinance as yf
 
@@ -47,7 +48,10 @@ class IngestionPipeline:
         # ------------------------------------------------------------------
         # Run metadata
         # ------------------------------------------------------------------
-        self.run_id = f"RUN_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+        timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
+        uid = uuid4().hex[:6]
+
+        self.run_id = f"RUN_{timestamp}_{uid}"
         self.run_dir = Path("datalake/runs") / self.run_id / "ingestion"
         self.run_dir.mkdir(parents=True, exist_ok=True)
 

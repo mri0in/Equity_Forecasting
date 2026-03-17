@@ -1,3 +1,5 @@
+# equity_forecasting/main.py
+
 """
 Central CLI entrypoint for the Equity Forecasting project.
 
@@ -32,11 +34,11 @@ import os
 import sys
 
 # Add src/ to sys.path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+#sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
-from pipeline.orchestrator import PipelineOrchestrator
-from api.main import start_api
-from utils.logger import get_logger
+from src.pipeline.orchestrator import PipelineOrchestrator
+from src.api.main import start_api
+from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 

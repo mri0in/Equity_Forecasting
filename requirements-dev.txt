@@ -26,3 +26,27 @@ sphinx-rtd-theme==2.1.2
 ipdb==0.13.13
 pre-commit==4.1.0
 nbformat==5.10.4
+ipykernel==6.30.1
+ipython==9.5.0
+ipywidgets==8.1.7
+jupyter_client==8.6.3
+jupyter_core==5.8.1
+widgetsnbextension==4.0.14
+coverage==7.9.0
+pip_search==0.0.13
+prompt_toolkit==3.0.52
+ipython_pygments_lexers==1.1.1
+jupyterlab_widgets==3.0.15
+
+
+
+# Debuggging
+debugpy==1.8.16
+
+# Notebook
+matplotlib==3.10.3
+matplotlib-inline==0.1.7
+stack-data==0.6.3
+pure_eval==0.2.3
+
+

@@ -6,9 +6,23 @@ build-backend = "setuptools.build_meta"
 name = "equity_forecasting"
 version = "0.1.0"
 description = "Equity forecasting ML platform"
-authors = [{name = "Mri"}]
+authors = [{ name = "Mri" }]
 requires-python = ">=3.10"
+
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pandas",
+    "numpy",
+    "streamlit"
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["src*"]
+include = ["src", "src.*"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov"
+]

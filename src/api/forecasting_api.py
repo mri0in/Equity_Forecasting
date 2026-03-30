@@ -17,6 +17,7 @@ from typing import Dict, Any
 from pathlib import Path
 import numpy as np
 import pandas as pd
+from fastapi import APIRouter, HTTPException, Query
 
 from src.adapter.adapter import run_adapter_forecast
 from src.dashboard.history_manager import EquityHistory
@@ -28,6 +29,9 @@ from src.monitoring.error_logging import (
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 error_logger = ErrorLogger(component=ErrorComponent.FORECASTING_API)
+
+# Initialize FastAPI router
+router = APIRouter()
 
 
 
@@ -221,3 +225,41 @@ def get_forecast_for_equity(
             fallback_action="Using simulated forecast with synthetic data",
         )
         return _simulated_forecast(equity, horizon)
+
+
+# =====================================================================
+# FastAPI Endpoint
+# =====================================================================
+@router.get("/", response_model=Dict[str, Any])
+async def forecast_endpoint(
+    equity: str = Query(..., description="Equity ticker symbol (e.g., RELIANCE, AAPL)"),
+    horizon: int = Query(30, description="Forecast horizon in days"),
+    sentiment: float = Query(0.0, description="Sentiment score"),
+    sentiment_simulated: bool = Query(False, description="Whether sentiment is simulated"),
+    overall_sentiment: float = Query(0.0, description="Overall sentiment score"),
+) -> Dict[str, Any]:
+    """
+    Get a forecast for a given equity ticker.
+    
+    Args:
+        equity: Equity ticker symbol
+        horizon: Number of days to forecast (default: 30)
+        sentiment: Sentiment score
+        sentiment_simulated: Whether using simulated sentiment
+        overall_sentiment: Overall market sentiment score
+        
+    Returns:
+        Dict with forecast data: dates, historical prices, and forecast prices
+    """
+    try:
+        result = get_forecast_for_equity(
+            equity=equity,
+            horizon=horizon,
+            sentiment=sentiment,
+            sentiment_simulated=sentiment_simulated,
+            overall_sentiment=overall_sentiment,
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Forecast endpoint error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

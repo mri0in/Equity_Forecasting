@@ -23,7 +23,7 @@ logger = logging.getLogger("training_api")
 # ------------------------------------------------------------
 # Endpoints
 # ------------------------------------------------------------
-@router.post("/train", response_model=Dict[str, str])
+@router.post("/", response_model=Dict[str, str])
 async def train_model(
     ticker: str = Query(..., description="Equity ticker symbol (e.g., RELIANCE, AAPL)"),
     config_path: str = Query(..., description="Path to YAML config file for training"),

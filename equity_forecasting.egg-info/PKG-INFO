@@ -1,0 +1,14 @@
+Metadata-Version: 2.4
+Name: equity_forecasting
+Version: 0.1.0
+Summary: Equity forecasting ML platform
+Author: Mri
+Requires-Python: >=3.10
+Requires-Dist: fastapi
+Requires-Dist: uvicorn
+Requires-Dist: pandas
+Requires-Dist: numpy
+Requires-Dist: streamlit
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: pytest-cov; extra == "dev"

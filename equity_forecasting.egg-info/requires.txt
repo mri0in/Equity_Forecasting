@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+pandas
+numpy
+streamlit
+
+[dev]
+pytest
+pytest-cov

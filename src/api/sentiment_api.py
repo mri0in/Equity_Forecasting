@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import Dict, Any
 
 # Business logic import (aggregates feeds + sentiment model)
-from src.features.market_sentiment.processing.aggregator import SentimentAggregator
+from src.features.market_sentiment.sentiment.sentiment_aggregator import SentimentAggregator
 from src.config.active_equity import get_active_equity
 
 # ------------------------------------------------------------
@@ -24,7 +24,7 @@ logger = logging.getLogger("sentiment_api")
 # ------------------------------------------------------------
 # Endpoints
 # ------------------------------------------------------------
-@router.get("/analyze", response_model=Dict[str, Any])
+@router.get("/", response_model=Dict[str, Any])
 async def analyze_sentiment(
     ticker: str = Query(..., description="Equity ticker symbol (e.g., RELIANCE, AAPL)"),
     source: str = Query("all", description="Feed source: news | social | press | web | all"),

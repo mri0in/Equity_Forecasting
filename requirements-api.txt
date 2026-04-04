@@ -1,32 +1,9 @@
-'''
-numpy==2.4.2
-pandas==2.2.3
-scikit-learn==1.6.1
-
 fastapi==0.115.12
 uvicorn==0.31.0
 pydantic==2.11.1
 
+pandas==2.2.3
+numpy==2.2.6
+
 yfinance==0.2.33
-
-lightgbm==4.3.0
-xgboost==2.1.1
-joblib==1.4.2
-
-pyarrow==17.0.0
-sqlalchemy==2.0.35
-
-requests==2.32.3
-httpx==0.28.1
-beautifulsoup4==4.13.4
-
 python-dotenv==1.0.1
-pyyaml==6.0.2
-tqdm==4.67.1
-python-json-logger==3.2.1
-
-# Optional (only if used in API)
-#transformers==4.48.2
-#nltk==3.8.1
-#textblob==0.17.1
-#feedparser==6.0.11

@@ -2,11 +2,8 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    cmake \
-    libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
+# Fix import path
+ENV PYTHONPATH=/app
 
 COPY requirements-api.txt .
 
@@ -15,6 +12,4 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 COPY . .
 
-EXPOSE 8000
-
-CMD ["python", "entrypoints/run_api.py"]
+CMD ["uvicorn", "src.api.main_api:app", "--host", "0.0.0.0", "--port", "8000"]
